@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.decomposition import FactorAnalysis
 import matplotlib.pyplot as plt
 
-class transform():
+class Transform():
     def __init__(self, num_latent):
         self.num_latent = num_latent
 
@@ -55,18 +55,30 @@ class transform():
         return Latent
         
 
-    def plot_traj_2d(self, X_latent, which_trials, which_times):
-        plt.plot(X_latent[which_trials,:,0].T,X_latent[which_trials,:,1].T)
-        for tr in which_trials:
-            plt.scatter(X_latent[tr,which_times,0],X_latent[tr,which_times,1])
-        plt.show()
+    def plot_traj(self, X_latent, which_trials, which_times, dim = 2, color_map = None, hue = None):
 
-    def plot_traj_3d(self, X_latent, which_trials, which_times):
-        fig = plt.figure()
-        ax = plt.axes(projection='3d')
-        for tr in which_trials:
-            ax.plot3D(X_latent[tr,:,0],X_latent[tr,:,1],X_latent[tr,:,2])
-            ax.scatter3D(X_latent[tr,which_times,0],X_latent[tr,which_times,1],X_latent[tr,which_times,2])
-        plt.show()
-        
+        if color_map is None:
+            cm = plt.get_cmap('inferno')       
+        else:
+            cm = color_map
 
+        if hue is None:
+            color_list = ['k' for _ in range(X_latent.shape[0])]
+        else:
+            num_group  = len(np.unique(hue))   
+            color = cm(np.linspace(0,0.85,num_group))
+            color_list = [color[hue[tr]] for tr in range(X_latent.shape[0])]
+
+        if dim == 2:
+            for tr in which_trials:
+                plt.plot(X_latent[tr,:,0].T,X_latent[tr,:,1].T, color=color_list[tr])
+                plt.scatter(X_latent[tr,which_times,0],X_latent[tr,which_times,1], color=color_list[tr])
+        elif dim == 3:
+            fig = plt.figure()
+            ax = plt.axes(projection='3d')
+            for tr in which_trials:
+                ax.plot3D(X_latent[tr,:,0],X_latent[tr,:,1],X_latent[tr,:,2], color=color_list[tr])
+                ax.scatter3D(X_latent[tr,which_times,0],X_latent[tr,which_times,1],X_latent[tr,which_times,2], color=color_list[tr])
+        else:
+            print("Dimension must be 2 or 3!")
+            
