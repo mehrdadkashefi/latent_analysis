@@ -23,7 +23,7 @@ class Transform():
 
         elif method == 'FA':
             self.method = 'FA'
-            FA = FactorAnalysis(n_components=5)
+            FA = FactorAnalysis(n_components=self.num_latent)
             FA.fit(X)
             self.components_ = FA.components_
             self.mean_ = FA.mean_
