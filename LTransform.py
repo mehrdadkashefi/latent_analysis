@@ -2,6 +2,9 @@ import numpy as np
 from sklearn.decomposition import FactorAnalysis
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
+import seaborn as sns
+import pandas as pd
+from dPCA import dPCA as dpca
 
 class Transform():
     def __init__(self, num_latent):
@@ -187,3 +190,40 @@ class jPCA():
         M = _reshape_vec2mat(result.x, N)
         assert(np.allclose(M, -M.T))
         return M
+    
+class dPCA():
+    def __init__(self, n_components, **kwargs):
+        self.n_components = n_components
+        self.soft_norm_value = kwargs.get('soft_norm_value', 5)
+        self.pie_plot = kwargs.get('pie_plot', True)
+    
+    def __pre_process(self, X):
+        units_mean = np.mean(X, axis=(0,1), keepdims=True)
+        n_range = np.max(np.vstack(X), axis=0, keepdims=True) - np.min(np.vstack(X), axis=0, keepdims=True)
+        self.X_norm = (X - units_mean)/(n_range + self.soft_norm_value)
+
+    def fit(self, X):
+        # Apply preprocessing
+        self.__pre_process(X)
+        # define the dPCA object
+        self.dpca = dpca.dPCA(labels='ct', join={'c':['c'], 't':['t'], 'ct':['ct']}, n_components=self.n_components)
+        self.dpca.protect = ['t']
+        self.dpca.fit(self.X_norm.transpose(2,0,1))
+
+    def transform(self, X):
+        # Apply preprocessing
+        self.__pre_process(X)  
+        Z = self.dpca.transform(self.X_norm.transpose(2,0,1))
+
+        if self.pie_plot:
+            df = pd.DataFrame(columns=['factor', 'pc', 'variance_explained'])
+            counter = 0
+            for name in self.dpca.explained_variance_ratio_.keys():
+                for c in range(self.dpca.n_components):
+                    df.loc[counter] = {'factor': name, 'pc': c, 'variance_explained': self.dpca.explained_variance_ratio_[name][c]}
+                    counter += 1
+
+            sns.barplot(df, x='pc', y='variance_explained', hue='factor', palette=sns.color_palette('muted', 3))
+            plt.ylabel('Ratio of explained variance')
+
+        return Z
