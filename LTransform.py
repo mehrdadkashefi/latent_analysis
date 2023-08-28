@@ -1,6 +1,7 @@
 import numpy as np
 from sklearn.decomposition import FactorAnalysis
 import matplotlib.pyplot as plt
+from scipy.optimize import minimize
 
 class Transform():
     def __init__(self, num_latent):
@@ -82,3 +83,107 @@ class Transform():
         else:
             print("Dimension must be 2 or 3!")
             
+
+
+class jPCA():
+    def __init__(self, **kwargs):
+        self.num_comp_pc = kwargs.get('num_latent', 6)
+        self.force_skewness = kwargs.get('force_skewness', True)
+        self.aling_x_axis = kwargs.get('align_x_axis', True)
+        
+
+    def fit(self, X):
+        # Normalize data, very important!
+        n_mean = np.mean(X, axis=0, keepdims=True)
+        n_range = np.max(np.vstack(X), axis=0, keepdims=True) - np.min(np.vstack(X), axis=0, keepdims=True)
+        rate_scaled = (X - n_mean)/(n_range+5)
+
+        transform = Transform(num_latent=self.num_comp_pc)
+        transform.fit(rate_scaled, method='PCA')
+        rate_red = transform.transform(rate_scaled, ensure_orthogonality=True)
+
+        # Fit the dynamicals system to data
+        A_red_n = rate_red[:, 1:, :]
+        A_red_n_1 = np.diff(rate_red, axis=1)
+        # Reshape to fit least squares
+        X = np.reshape(A_red_n, (-1, A_red_n.shape[2]))
+        X_dot = np.reshape(A_red_n_1, (-1, A_red_n_1.shape[2]))
+
+        # Fit M with no constraints
+        if self.force_skewness:
+            M =  self.skew_sym_regress(X, X_dot)
+        else:
+            M = np.linalg.lstsq(X, X_dot, rcond=None)[0]
+        # Get eigenvalues and eigenvectors of the dynamical system
+        L, V = np.linalg.eig(M)
+        v1 = V[:, 0:1] + V[:, 1:2]
+        v2 = 1j*(V[:, 0:1] - V[:, 1:2])
+        # Get the jPCA projections
+        # v1 and v2 are real but the complex component is still here, hence np.real
+        self.jpca_w = np.real(np.concatenate((v1, v2), axis=1))
+        
+    def transform(self, X):
+        # Normalize data, very important!
+        n_mean = np.mean(X, axis=0, keepdims=True)
+        n_range = np.max(np.vstack(X), axis=0, keepdims=True) - np.min(np.vstack(X), axis=0, keepdims=True)
+        rate_scaled = (X - n_mean)/(n_range+5)
+
+        # Initial PCA
+        transform = Transform(num_latent=self.num_comp_pc)
+        transform.fit(rate_scaled, method='PCA')
+        rate_red = transform.transform(rate_scaled, ensure_orthogonality=True)
+
+        rate_jpca = np.matmul(rate_red, self.jpca_w)
+        ## Rotate axis so that planning is aligned with X axis
+        if self.aling_x_axis:
+            transform = Transform(num_latent=rate_jpca.shape[-1])
+            transform.fit(rate_jpca[:, 0, :], method='PCA')
+            rate_jpca = transform.transform(rate_jpca, ensure_orthogonality=True)
+        return rate_jpca
+        
+    # Helper functions for getting the skew-symmetric matrix    
+    def skew_sym_regress(self, X, X_dot, tol=1e-4):
+        """
+        Fits a skew-symmetric matrix M to the data X_dot = X @ M.T
+        """
+        def _objective(h, X, X_dot):
+            _, N = X.shape
+            M = _reshape_vec2mat(h, N)
+            return 0.5 * np.linalg.norm(X @ M.T - X_dot, ord='fro')**2
+
+
+        def _reshape_mat2vec(M, N):
+            upper_tri_indices = np.triu_indices(N, k=1)
+            return M[upper_tri_indices]
+        
+        def _reshape_vec2mat(h, N):
+            M = np.zeros((N, N))
+            upper_tri_indices = np.triu_indices(N, k=1)
+            M[upper_tri_indices] = h
+            return M - M.T
+
+        def _grad_f(h, X, X_dot):
+            _, N = X.shape
+            M = _reshape_vec2mat(h, N)
+            dM = (X.T @ X @ M.T) - X.T @ X_dot
+            return _reshape_mat2vec(dM.T - dM, N)
+
+        # Initialize with least squares
+        T, N = X.shape
+        M_lstq, _, _, _ = np.linalg.lstsq(X, X_dot, rcond=None)
+        M_lstq = M_lstq.T
+        M_init = 0.5 * (M_lstq - M_lstq.T)
+        h_init = _reshape_mat2vec(M_init, N)
+
+        options=dict(maxiter=10000, gtol=tol)
+        result = minimize(lambda h: _objective(h, X, X_dot),
+                            h_init,
+                            jac=lambda h: _grad_f(h, X, X_dot),
+                            method='CG',
+                            options=options)
+        if not result.success:
+            print("Optimization failed.")
+            print(result.message)
+        M = _reshape_vec2mat(result.x, N)
+        assert(np.allclose(M, -M.T))
+        return M
