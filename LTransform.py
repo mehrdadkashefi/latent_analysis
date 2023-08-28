@@ -117,13 +117,22 @@ class jPCA():
             M =  self.skew_sym_regress(X, X_dot)
         else:
             M = np.linalg.lstsq(X, X_dot, rcond=None)[0]
+
+        print('R2 for linear fit: {}'.format(np.round(self.R2(X_dot, X@M), 3)))
         # Get eigenvalues and eigenvectors of the dynamical system
         L, V = np.linalg.eig(M)
-        v1 = V[:, 0:1] + V[:, 1:2]
-        v2 = 1j*(V[:, 0:1] - V[:, 1:2])
+        # Remove any small imaginary components
+        L = np.imag(L)
+        if L[0]<0:
+            v1 = V[:, 0:1] + V[:, 1:2]
+            v2 = 1j*(V[:, 0:1] - V[:, 1:2])
+        else:
+            v1 = V[:, 1:2] + V[:, 0:1]
+            v2 = 1j*(V[:, 1:2] - V[:, 0:1])
         # Get the jPCA projections
         # v1 and v2 are real but the complex component is still here, hence np.real
-        self.jpca_w = np.real(np.concatenate((v1, v2), axis=1))
+        self.jpca_w = np.real(np.concatenate((v1, v2), axis=1))/np.sqrt(2)
+
         
     def transform(self, X):
         # Normalize data, very important!
@@ -135,15 +144,21 @@ class jPCA():
         transform = Transform(num_latent=self.num_comp_pc)
         transform.fit(rate_scaled, method='PCA')
         rate_red = transform.transform(rate_scaled, ensure_orthogonality=True)
-
+        print('Var explained by initial PCA {}'.format(np.round(sum(transform.variance_explained[0:self.num_comp_pc]), 3)))
         rate_jpca = np.matmul(rate_red, self.jpca_w)
+        rate_jpca = np.matmul(rate_red, self.jpca_w/np.linalg.norm(self.jpca_w))
+        print('Var explained by 2 jPCs {}'.format(np.round(np.sum(np.var(rate_jpca, axis=0))/np.sum(np.var(rate_red, axis=0)), 3)))
+        
+
         ## Rotate axis so that planning is aligned with X axis
         if self.aling_x_axis:
             transform = Transform(num_latent=rate_jpca.shape[-1])
             transform.fit(rate_jpca[:, 0, :], method='PCA')
             rate_jpca = transform.transform(rate_jpca, ensure_orthogonality=True)
         return rate_jpca
-        
+
+    def R2(self, y_true, y_pred):
+        return 1 - np.sum((y_true - y_pred)**2)/np.sum((y_true - np.mean(y_true))**2)    
     # Helper functions for getting the skew-symmetric matrix    
     def skew_sym_regress(self, X, X_dot, tol=1e-4):
         """
@@ -189,7 +204,7 @@ class jPCA():
             print(result.message)
         M = _reshape_vec2mat(result.x, N)
         assert(np.allclose(M, -M.T))
-        return M
+        return M.T
     
 class dPCA():
     def __init__(self, n_components, **kwargs):
@@ -227,3 +242,4 @@ class dPCA():
             plt.ylabel('Ratio of explained variance')
 
         return Z
+
