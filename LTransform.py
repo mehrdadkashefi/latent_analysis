@@ -104,6 +104,7 @@ class jPCA():
         transform = Transform(num_latent=self.num_comp_pc)
         transform.fit(rate_scaled, method='PCA')
         rate_red = transform.transform(rate_scaled, ensure_orthogonality=True)
+        print('Var explained by initial PCA {}'.format(np.round(sum(transform.variance_explained[0:self.num_comp_pc]), 3)))
 
         # Fit the dynamicals system to data
         A_red_n = rate_red[:, 1:, :]
@@ -133,7 +134,6 @@ class jPCA():
         # v1 and v2 are real but the complex component is still here, hence np.real
         self.jpca_w = np.real(np.concatenate((v1, v2), axis=1))/np.sqrt(2)
 
-        
     def transform(self, X):
         # Normalize data, very important!
         n_mean = np.mean(X, axis=0, keepdims=True)
@@ -144,17 +144,17 @@ class jPCA():
         transform = Transform(num_latent=self.num_comp_pc)
         transform.fit(rate_scaled, method='PCA')
         rate_red = transform.transform(rate_scaled, ensure_orthogonality=True)
-        print('Var explained by initial PCA {}'.format(np.round(sum(transform.variance_explained[0:self.num_comp_pc]), 3)))
         rate_jpca = np.matmul(rate_red, self.jpca_w)
-        rate_jpca = np.matmul(rate_red, self.jpca_w/np.linalg.norm(self.jpca_w))
         print('Var explained by 2 jPCs {}'.format(np.round(np.sum(np.var(rate_jpca, axis=0))/np.sum(np.var(rate_red, axis=0)), 3)))
-        
 
         ## Rotate axis so that planning is aligned with X axis
         if self.aling_x_axis:
             transform = Transform(num_latent=rate_jpca.shape[-1])
             transform.fit(rate_jpca[:, 0, :], method='PCA')
             rate_jpca = transform.transform(rate_jpca, ensure_orthogonality=True)
+            # Make sure rotations are always CCW
+            if np.cross(np.append(transform.components_[:,0], 0), np.append(transform.components_[:,1], 0))[-1]:
+                rate_jpca = np.matmul(rate_jpca, np.array([[1,  0],[0 ,-1]]))
         return rate_jpca
 
     def R2(self, y_true, y_pred):
