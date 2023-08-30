@@ -5,6 +5,7 @@ from scipy.optimize import minimize
 import seaborn as sns
 import pandas as pd
 from dPCA import dPCA as dpca
+from scipy.optimize import minimize, NonlinearConstraint
 
 class Transform():
     def __init__(self, num_latent):
@@ -210,7 +211,7 @@ class dPCA():
     def __init__(self, n_components, **kwargs):
         self.n_components = n_components
         self.soft_norm_value = kwargs.get('soft_norm_value', 5)
-        self.pie_plot = kwargs.get('pie_plot', True)
+        self.plot = kwargs.get('plot', True)
     
     def __pre_process(self, X):
         units_mean = np.mean(X, axis=(0,1), keepdims=True)
@@ -230,7 +231,7 @@ class dPCA():
         self.__pre_process(X)  
         Z = self.dpca.transform(self.X_norm.transpose(2,0,1))
 
-        if self.pie_plot:
+        if self.plot:
             df = pd.DataFrame(columns=['factor', 'pc', 'variance_explained'])
             counter = 0
             for name in self.dpca.explained_variance_ratio_.keys():
@@ -243,3 +244,92 @@ class dPCA():
 
         return Z
 
+class OrthogonalPCA():
+    def __init__(self, **kwargs):
+        self.n_components = kwargs.get('n_components', 20)
+        self.soft_norm_value = kwargs.get('soft_norm_value', 5)
+        self.verbose = kwargs.get('verbose', 1)
+
+    def pre_process(self, X):
+        units_mean = np.mean(X, axis=0, keepdims=True)
+        n_range = np.max(np.vstack(X), axis=0, keepdims=True) - np.min(np.vstack(X), axis=0, keepdims=True)
+        return (X - units_mean)/(n_range + self.soft_norm_value)
+    
+    def fit(self, data_prep, data_exe):
+        # Preprocess (remove condition mean and soft scaling)
+        data_prep = self.pre_process(data_prep)
+        data_exe = self.pre_process(data_exe)
+
+        # Estimate the covariance matrices
+        N_p = np.vstack(data_prep).T
+        N_e = np.vstack(data_exe).T
+        num_units = N_p.shape[0]
+
+        # Estimate the Covariance
+        C_p = (1/(N_p.shape[1]-1))*((N_p - np.mean(N_p,axis=1, keepdims=True))@(N_p - np.mean(N_p,axis=1, keepdims=True)).T)
+        C_e = (1/(N_e.shape[1]-1))*((N_e - np.mean(N_e,axis=1, keepdims=True))@(N_e - np.mean(N_e,axis=1, keepdims=True)).T)
+
+        _, S_e, _ = np.linalg.svd(C_e)
+        _, S_p, _ = np.linalg.svd(C_p)
+        S_e = np.sum(S_e)
+        S_p = np.sum(S_p)
+
+        # Run the optimization for double PCAs
+        num_dim = self.n_components
+        # Initialize the weights with PCA on segments of data
+        transform = Transform(num_latent=data_prep.shape[-1])
+        transform.fit(data_exe, method='PCA')
+        W_e = transform.components_[:,:num_dim]
+        #W_e = np.random.randn(num_units, num_dim)
+
+
+        transform = Transform(num_latent=data_prep.shape[-1])
+        transform.fit(data_prep, method='PCA')
+        W_p = transform.components_[:,:num_dim]
+        #W_p = np.random.randn(num_units, num_dim)
+
+        def  mycost(x):
+            W_p = x[:int(len(x)/2)].reshape(num_units, num_dim) 
+            W_e = x[int(len(x)/2):].reshape(num_units, num_dim)
+            f = 0.5*((np.trace(W_p.T@C_p@W_p)/S_p ) + (np.trace(W_e.T@C_e@W_e)/S_e) )
+            return -f
+
+        x0 = np.concatenate((W_p.reshape(-1,), W_e.reshape(-1,)))
+
+
+        con1 = lambda x: ((x[:int(len(x)/2)].reshape(num_units, num_dim)).T@ x[int(len(x)/2):].reshape(num_units, num_dim)).reshape(-1,)
+        nlc1 = NonlinearConstraint(con1, np.zeros((num_dim,num_dim)).reshape(-1,) ,np.zeros((num_dim,num_dim)).reshape(-1,))
+
+        con2 = lambda x: ((x[:int(len(x)/2)].reshape(num_units, num_dim)).T@ (x[:int(len(x)/2)].reshape(num_units, num_dim))).reshape(-1,)
+        nlc2 = NonlinearConstraint(con2, np.eye((num_dim)).reshape(-1,) ,np.eye((num_dim)).reshape(-1,))
+
+        con3 = lambda x: ((x[int(len(x)/2):].reshape(num_units, num_dim)).T@ (x[int(len(x)/2):].reshape(num_units, num_dim))).reshape(-1,)
+        nlc3 = NonlinearConstraint(con3, np.eye((num_dim)).reshape(-1,) ,np.eye((num_dim)).reshape(-1,))
+
+
+        res = minimize(mycost, x0,constraints=(nlc1, nlc2, nlc3), method='trust-constr',
+                    options={'disp': True, 'maxiter':500, 'verbose':self.verbose})
+        
+        # Get the final weights
+        x_opt = res.x
+        W_p = x_opt[:int(len(x_opt)/2)].reshape(num_units, num_dim) 
+        W_e = x_opt[int(len(x_opt)/2):].reshape(num_units, num_dim)
+        # Plot variance explained by each dimension
+        print('Planning: ', np.trace(W_p.T@C_p@W_p)/S_p)
+        print('Execution: ', np.trace(W_e.T@C_e@W_e)/S_e) 
+        ## Check condtions
+        print('Normality of W_p:', np.isclose(W_p.T@W_p, np.eye(W_p.shape[1])).all())
+        print('Normality of W_e:', np.isclose(W_e.T@W_e, np.eye(W_e.shape[1])).all())
+        print('Orthogonality of W_e and W_p:', np.isclose(W_e.T@W_p, np.zeros(W_e.shape[1])).all())
+
+        # Perform a final pca to sort the dimensions (This step does not change the amound of variance explained)
+        # Rotate Ws to maximize variance explained by first dimension
+        transform = Transform(num_latent=W_p.shape[-1])
+        transform.fit(data_prep @ W_p, method='PCA')
+        W_p = W_p @ transform.components_
+        # Execution
+        transform = Transform(num_latent=W_e.shape[-1])
+        transform.fit(data_exe @ W_e, method='PCA')
+        W_e = W_e @ transform.components_
+
+        return W_p, W_e

@@ -177,6 +177,3 @@ class Analysis_tools():
         return np.vstack(data_aligned)
     
 
-######### Tools for dimensionality reduction #########
-
-
