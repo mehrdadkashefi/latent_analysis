@@ -14,7 +14,7 @@ class Transform():
     def fit(self, X, method):
         dims = X.shape
         if len(dims)>2:
-            print('Found tensor- Reshaping data to -1, num_unit')
+            #print('Found tensor- Reshaping data to -1, num_unit')
             X = X.reshape(-1, dims[-1])
 
         if method == 'PCA':
@@ -38,7 +38,7 @@ class Transform():
     def transform(self, X, ensure_orthogonality):
         dims = X.shape
         if len(dims)>2:
-            print('Found tensor- Reshaping data to -1, num_unit')
+            #print('Found tensor- Reshaping data to -1, num_unit')
             X = X.reshape(-1, dims[-1])
         # Perform Transform for each method
         if self.method == 'PCA':
@@ -226,21 +226,27 @@ class dPCA():
         self.dpca.protect = ['t']
         self.dpca.fit(self.X_norm.transpose(2,0,1))
 
+    def plot_explained_variance(self):
+        plt.figure()
+        sns.barplot(self.var_explained_df, x='pc', y='variance_explained', hue='factor', palette=sns.color_palette('muted', 3))
+        plt.ylabel('Ratio of explained variance')
+        plt.show()
+
     def transform(self, X):
         # Apply preprocessing
         self.__pre_process(X)  
         Z = self.dpca.transform(self.X_norm.transpose(2,0,1))
 
+        self.var_explained_df = pd.DataFrame(columns=['factor', 'pc', 'variance_explained'])
+        counter = 0
+        for name in self.dpca.explained_variance_ratio_.keys():
+            for c in range(self.dpca.n_components):
+                self.var_explained_df.loc[counter] = {'factor': name, 'pc': c, 'variance_explained': self.dpca.explained_variance_ratio_[name][c]}
+                counter += 1
+                
         if self.plot:
-            df = pd.DataFrame(columns=['factor', 'pc', 'variance_explained'])
-            counter = 0
-            for name in self.dpca.explained_variance_ratio_.keys():
-                for c in range(self.dpca.n_components):
-                    df.loc[counter] = {'factor': name, 'pc': c, 'variance_explained': self.dpca.explained_variance_ratio_[name][c]}
-                    counter += 1
-
-            sns.barplot(df, x='pc', y='variance_explained', hue='factor', palette=sns.color_palette('muted', 3))
-            plt.ylabel('Ratio of explained variance')
+            self.plot_explained_variance()
+            
 
         return Z
 
