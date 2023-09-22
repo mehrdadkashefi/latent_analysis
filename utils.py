@@ -134,10 +134,10 @@ class Analysis_tools():
             mask_idx = np.where(mask)[0]
             # Get start time, end time and event time for each condition
             # Start and end time in absolute time 
-            start_times = trial_info.loc[mask_idx].start_time.to_numpy()
-            end_times = trial_info.loc[mask_idx].stop_time.to_numpy()
+            start_times = trial_info.iloc[mask_idx].start_time.to_numpy()
+            end_times = trial_info.iloc[mask_idx].stop_time.to_numpy()
             # event code time reletive to trial start
-            event_times = trial_info.loc[mask_idx][align_column].to_numpy() - start_times
+            event_times = trial_info.iloc[mask_idx][align_column].to_numpy() - start_times
             # Allocate space for trials of the condition
             data_temp = np.zeros((len(start_times) ,t_range[1] - t_range[0], len(D[channel_column].columns)))
             # Loop over trials of the same conditioin
@@ -161,7 +161,7 @@ class Analysis_tools():
             mask = np.all(trial_info[condition_columns] == cond, axis=1)
             mask_idx = np.where(mask)[0]
             # event code time reletive to trial start
-            event_times = trial_info.loc[mask_idx][align_column].to_numpy()
+            event_times = trial_info.iloc[mask_idx][align_column].to_numpy()
             # Allocate space for trials of the condition
             data_temp = np.zeros((len(event_times) ,t_range[1] - t_range[0], len(unit)))
             
