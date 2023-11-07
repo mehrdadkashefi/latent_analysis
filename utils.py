@@ -43,8 +43,54 @@ def read_mc_maze(data_path):
     
     return D, trial_info, units
 
-data_path = "./000128/sub-Jenkins/sub-Jenkins_ses-full_desc-train_behavior+ecephys.nwb"
-D, trial_info, units = read_mc_maze(data_path)
+def read_mc_rtt(data_path):
+    data = NWBHDF5IO(data_path, "r").read()
+    D = pd.DataFrame({
+                        ('cursor_pos', 'x'):data.processing['behavior']['cursor_pos'].data[:,0].reshape(-1, ),
+                        ('cursor_pos', 'y'):data.processing['behavior']['cursor_pos'].data[:,1].reshape(-1, ),
+                        ('finger_pos', 'x'):data.processing['behavior']['finger_pos'].data[:,0].reshape(-1, ),
+                        ('finger_pos', 'y'):data.processing['behavior']['finger_pos'].data[:,1].reshape(-1, ),
+                        ('finger_vel', 'x'):data.processing['behavior']['finger_vel'].data[:,0].reshape(-1, ),
+                        ('finger_vel', 'y'):data.processing['behavior']['finger_vel'].data[:,1].reshape(-1, ),
+                        ('target_pos', 'x'):data.processing['behavior']['target_pos'].data[:,0].reshape(-1, ),
+                        ('target_pos', 'y'):data.processing['behavior']['target_pos'].data[:,1].reshape(-1, ),
+                            })
+   
+    # Defime trial by target update
+    t_pos = np.vstack((D['target_pos']['x'], D['target_pos']['y'])).T
+    event = np.where(np.sum(np.abs(np.diff(t_pos,axis=0)), axis=1)>5)[0]
+
+    trial_info = pd.DataFrame({
+                        ('start_time','time'):np.append(np.zeros(1,), event[:-1])/1000,
+                        ('end_time','time'):event/1000,
+                        ('to_target', 'x'):D['target_pos'].iloc[event]['x'],
+                        ('to_target', 'y'):D['target_pos'].iloc[event]['y'],
+                            })
+    
+    unique_target_id, unique_target_idx = np.unique(np.vstack((D['target_pos'].iloc[event]['x'].values, D['target_pos'].iloc[event]['y'].values) ), axis=1, return_inverse=True)
+    trial_info[('to_target', 'id')] = unique_target_idx
+    
+    trial_info[('from_target', 'x')] = D['target_pos'].iloc[np.append(event[0], event[:-1])]['x'].values
+    trial_info[('from_target', 'y')] = D['target_pos'].iloc[np.append(event[0], event[:-1])]['y'].values
+    trial_info[('from_target', 'id')] = np.append(unique_target_idx[0], unique_target_idx[:-1])
+    # Add the reach extent
+    dist = np.vstack((trial_info['to_target']['x'].values, trial_info['to_target']['y'].values)) 
+    - np.vstack((trial_info['from_target']['x'].values, trial_info['from_target']['y'].values))
+    trial_info[('reach_extent', ' ')] = np.linalg.norm(dist, axis=0)
+    # Remove the first trial: bad from traget
+    trial_info = trial_info.drop(index=trial_info.index[0], axis=0)
+
+
+
+    units = data.units.to_dataframe()
+    units = units.drop(labels='obs_intervals', axis=1)
+    units['location'] = [units.loc[u].electrodes.iloc[0].location for u in units.index]
+    units = units.drop(labels='electrodes', axis=1)
+    return D, trial_info, units
+    
+
+#data_path = "./000128/sub-Jenkins/sub-Jenkins_ses-full_desc-train_behavior+ecephys.nwb"
+#D, trial_info, units = read_mc_maze(data_path)
 
 
 ######### Tools for data analysis #########
