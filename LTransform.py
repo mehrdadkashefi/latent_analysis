@@ -6,6 +6,8 @@ import seaborn as sns
 import pandas as pd
 from dPCA import dPCA as dpca
 from scipy.optimize import minimize, NonlinearConstraint
+from scipy.optimize import nnls
+
 
 class Transform():
     def __init__(self, num_latent):
