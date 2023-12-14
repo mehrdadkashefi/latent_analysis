@@ -60,6 +60,7 @@ class VarDecompose():
         width = kwargs.get('width', 15)
         height = kwargs.get('height', 5)
         save_dir = kwargs.get('save_dir', None)
+        name = kwargs.get('name', '')
         # Plot the results
         plt.figure(figsize=(width, height))
         plt.plot(self.tss, color='r')
@@ -68,21 +69,19 @@ class VarDecompose():
         plt.ylabel('Var (a.u.)')
         plt.xticks([])
         if save_dir is not None:
-            plt.savefig(save_dir + 'VarTot.svg')
-        plt.show()
+            plt.savefig(save_dir + name + 'VarTot.pdf')
         plt.figure(figsize=(width, height))
         plt.plot(self.fss.T)
         plt.ylabel('Var exp (a.u.)')
         plt.xticks([])
         plt.legend(self.G_m.name)
         if save_dir is not None:
-            plt.savefig(save_dir + 'VarExp.svg')
+            plt.savefig(save_dir + name + 'VarExp.pdf')
         plt.figure(figsize=(width, height))
         plt.plot(self.fss.T/(np.sum(self.fss, axis=0, keepdims=True).T + np.finfo(float).eps))
         plt.ylabel('Var exp Norm')
         if save_dir is not None:
-            plt.savefig(save_dir + 'VarExpNorm.svg')
-        plt.show()
+            plt.savefig(save_dir + name + 'VarExpNorm.pdf')
     # A class for organizing Gs    
     class G_maker():
         def __init__(self):
@@ -98,14 +97,17 @@ class VarDecompose():
             print('#Gs: ',len(self.name))
             for n in self.name:
                 print(n)
-        def plot(self):
+        def plot(self, **kwargs):
+            save_dir = kwargs.get('save_dir', None)
+            name = kwargs.get('name', '')
             fig, ax = plt.subplots(1, len(self.G))
             for i, g in enumerate(self.G):
                 ax[i].imshow(g)
                 ax[i].set_title(self.name[i])
                 ax[i].set_xticks([])
                 ax[i].set_yticks([])
-            plt.show()
+            if save_dir is not None:
+                plt.savefig(save_dir + name +  'Gs.pdf')
     # helper function for making one-hot vectors from categorical data
     def IndicatorMatrix(self, what, vec):
         transp=0
