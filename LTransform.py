@@ -107,6 +107,7 @@ class jPCA():
         transform = Transform(num_latent=self.num_comp_pc)
         transform.fit(rate_scaled, method='PCA')
         rate_red = transform.transform(rate_scaled, ensure_orthogonality=True)
+        self.variance_explained_pca = np.round(sum(transform.variance_explained[0:self.num_comp_pc]), 3)
         print('Var explained by initial PCA {}'.format(np.round(sum(transform.variance_explained[0:self.num_comp_pc]), 3)))
 
         # Fit the dynamicals system to data
@@ -121,7 +122,7 @@ class jPCA():
             M =  self.skew_sym_regress(X, X_dot)
         else:
             M = np.linalg.lstsq(X, X_dot, rcond=None)[0]
-
+        self.variance_explained_rot_fit = np.round(self.R2(X_dot, X@M), 3)
         print('R2 for linear fit: {}'.format(np.round(self.R2(X_dot, X@M), 3)))
         # Get eigenvalues and eigenvectors of the dynamical system
         L, V = np.linalg.eig(M)
@@ -148,6 +149,7 @@ class jPCA():
         transform.fit(rate_scaled, method='PCA')
         rate_red = transform.transform(rate_scaled, ensure_orthogonality=True)
         rate_jpca = np.matmul(rate_red, self.jpca_w)
+        self.variance_explained_jpcs = np.round(np.sum(np.var(rate_jpca, axis=0))/np.sum(np.var(rate_red, axis=0)), 3)
         print('Var explained by 2 jPCs {}'.format(np.round(np.sum(np.var(rate_jpca, axis=0))/np.sum(np.var(rate_red, axis=0)), 3)))
 
         ## Rotate axis so that planning is aligned with X axis
