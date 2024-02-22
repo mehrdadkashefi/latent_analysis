@@ -9,6 +9,7 @@ import pandas as pd
 from scipy.signal import gaussian, convolve
 import multiprocess
 from functools import partial
+from scipy.io import loadmat
 
 ######### Read data #########
 
@@ -41,6 +42,44 @@ def read_mc_maze(data_path):
 
     trial_info = trial_info[trial_info['stop_time'] <= len(D)/1000]
     
+    return D, trial_info, units
+
+def read_nhp_sequence(data_path, **kwargs):
+    """ Read the data from the NHP sequence task 
+    Args:
+        data_path (str): Path to the data set 
+        KSGood_only (bool): If True, only use units with good KS label will be loaded
+    Returns:
+        D (df): Data frame of the continuous data (Hand pos, Hand vel, etc.)
+        trial_info (df): Data frame of the trial information (Start time, end time, etc.)
+        units (df): Data frame of the units (Spike times, KS label, etc.)
+    """
+    KSGood_only = kwargs.get('KSGood_only', False)   # Radius of the target
+    KSVersion = kwargs.get('KSVersion', 4)   # Which version of Kilosort to use
+
+    trial_info = pd.read_csv(data_path + "trial_info.csv")
+    if KSVersion == 4:
+        units = pd.read_pickle(data_path + "units_ks40.pkl")
+    elif KSVersion == 2:
+        units = pd.read_pickle(data_path + "units_ks20.pkl")
+
+    if KSGood_only:
+        units = units.loc[units.KSLabel == 'good', :]
+
+    temp = loadmat(data_path + "D.mat")['D']
+    D = pd.DataFrame({
+    ('hand_pos', 'x'):temp[:,0],
+    ('hand_pos', 'y'):temp[:,1],
+    ('hand_vel', 'x'):temp[:,2],
+    ('hand_vel', 'y'):temp[:,3]
+    })
+    # rename last event
+    trial_info['last_event'].replace(1, 'END_TRIAL', inplace=True)
+    trial_info['last_event'].replace(2, 'TIMEOUT', inplace=True)
+    trial_info['last_event'].replace(3, 'BAD_DWELL', inplace=True)
+    trial_info['last_event'].replace(4, 'EARLY_GO', inplace=True)
+    trial_info['last_event'].replace(5, 'BAD_TARGET', inplace=True)
+
     return D, trial_info, units
 
 def read_mc_rtt(data_path):
@@ -169,11 +208,13 @@ class Analysis_tools():
 
         return FR
     
-    def align_continuous(self, trial_info, D, condition_columns, align_column, channel_column, t_range):
+    def align_continuous(self, trial_info, D, condition_columns, align_column, channel_column, t_range, return_mean = True):
         """ Aligns continuous data on a specific event 
         """
         conds = trial_info.set_index(condition_columns).index.unique().tolist()
         data_aligned = np.zeros((len(conds),t_range[1] - t_range[0], len(D[channel_column].columns)))
+        data_aligned_trials = []
+        aligned_trials_type = []
         for cond_i, cond in enumerate(conds):
             # Make a mask to select desired trials
             mask = np.all(trial_info[condition_columns] == cond, axis=1)
@@ -193,9 +234,16 @@ class Analysis_tools():
                 data_temp[i, :, :] = temp[t_event+t_range[0]:t_event+t_range[1], :]
             # Get the mean over trials of condition
             data_aligned[cond_i, :, :] = np.mean(data_temp, axis=0)
-        return data_aligned
+            aligned_trials_type.append(cond_i * np.ones((len(mask_idx))))
+            if return_mean == False:
+                data_aligned_trials.append(data_temp)
+        # Return        
+        if return_mean == True:
+            return data_aligned, np.array(conds), np.hstack(aligned_trials_type).astype(int)
+        else:
+            return np.vstack(data_aligned_trials), np.array(conds), np.hstack(aligned_trials_type).astype(int)
      
-    def align_fr(self, trial_info, units, condition_columns, align_column, unit, t_range):
+    def align_fr(self, trial_info, units, condition_columns, align_column, unit, t_range, return_mean = True):
         """ Aligns units firing rate on a specific event 
         """
         conds = trial_info.set_index(condition_columns).index.unique().tolist()
@@ -215,11 +263,13 @@ class Analysis_tools():
                 # Loop over trials of the same conditioin
                 for i, tev in enumerate(event_times):
                     data_temp[i, :, u_i] = self.get_fr(u, units, [tev + (t_range[0]/self.fs) , tev + (t_range[1]/self.fs)], plot=False)
-
-            return np.expand_dims(np.mean(data_temp, axis=0), axis=0)        
+            if return_mean:
+                return np.expand_dims(np.mean(data_temp, axis=0), axis=0)
+            else:
+                return data_temp
         
         with multiprocess.Pool(processes=10) as pool:
             data_aligned = pool.map(par_fuction_over_cond, conds)
+            
         return np.vstack(data_aligned)
-    
 

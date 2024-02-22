@@ -1,5 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import multiprocess
+from sklearn.linear_model import RidgeClassifierCV
+from sklearn.model_selection import KFold
+from scipy.signal import savgol_filter
 from scipy.optimize import nnls
 
 class VarDecompose():
@@ -123,3 +127,63 @@ class VarDecompose():
             for i in range(K):
                 X[unique_idx==i,i] = 1
         return X
+    
+class TimePointClassifier():
+    """ 
+    An anlysis tool for classification of experimental conditions from continuous variables like position, velocity, average FR, etc.
+    The continuous data (X) should be in the shape of (num_conditions, num_timepoints, num_variables)
+    The associated class value (y) (num_conditions, )
+    Example:
+        TClassifier = ST.TimepointClassifier()
+        acc, acc_chance =  TClassifier.fit(X, y) 
+    """
+    def __init__(self,predictor_name, class_name, num_fold = 5, num_core = 10, num_sampling_rep = 30):
+        self.predictor_name = predictor_name
+        self.predictor_name = class_name
+        self.num_fold = num_fold
+        self.num_sampling_rep = num_sampling_rep
+        self.num_core = num_core
+  
+    def fit(self, X, y):
+        self.X = X
+        self.y = y
+        acc = np.zeros((X.shape[1],))
+        with multiprocess.Pool(processes=self.num_core) as pool:
+            acc  = pool.map(self.par_function_classification, range(X.shape[1]))
+        acc = np.array(acc) 
+        self.acc_chance = acc[:, 1]
+        self.acc = acc[:, 0]
+        return self.acc, self.acc_chance
+    
+    def plot(self, winseize = 40):
+        plt.plot(savgol_filter(self.acc, window_length=winseize, polyorder=3), color='k')
+        plt.plot(self.acc, alpha=0.4 , color='k')
+        plt.plot(savgol_filter(self.acc_chance, window_length=winseize, polyorder=3), color='r', linewidth=.5)
+        plt.plot(self.acc_chance, alpha=0.4, color='r', linewidth=.5)
+        plt.xlabel('Time (ms)')
+        plt.ylabel('Accuracy')
+        plt.legend(['Accuracy', 'Chance'])
+
+    def par_function_classification(self, t):
+        X = self.X[:, t, :]
+        y = self.y
+        acc_temp = []
+        acc_rand_temp = []
+        for _ in range(self.num_sampling_rep):
+            acc_temp.append(self.classifier(X,y, randomize_y = False))
+            acc_rand_temp.append(self.classifier(X,y, randomize_y = True))
+        return np.mean(acc_temp), np.mean(acc_rand_temp)
+    
+    def classifier(self, X,y, randomize_y = False):
+        if randomize_y:
+            rand_idx = np.random.permutation(len(y))
+            y = y[rand_idx]
+        kf = KFold(n_splits= self.num_fold, shuffle=True)
+        score = []
+        for train_index, test_index in kf.split(X):
+            X_train, X_test = X[train_index], X[test_index]
+            y_train, y_test = y[train_index], y[test_index]
+            clf = RidgeClassifierCV().fit(X_train, y_train)
+            score.append(clf.score(X_test, y_test))
+        score = np.mean(score)
+        return score
