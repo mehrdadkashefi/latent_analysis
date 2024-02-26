@@ -147,10 +147,17 @@ class TimePointClassifier():
     def fit(self, X, y):
         self.X = X
         self.y = y
-        acc = np.zeros((X.shape[1],))
-        with multiprocess.Pool(processes=self.num_core) as pool:
-            acc  = pool.map(self.par_function_classification, range(X.shape[1]))
-        acc = np.array(acc) 
+        
+        if self.num_core ==1:
+            acc = np.zeros((X.shape[1],2))
+            for t in range(X.shape[1]):
+                acc[t, :] = self.par_function_classification(t)
+        else:
+            acc = np.zeros((X.shape[1],))
+            with multiprocess.Pool(processes=self.num_core) as pool:
+                acc  = pool.map(self.par_function_classification, range(X.shape[1]))
+            acc = np.array(acc) 
+            
         self.acc_chance = acc[:, 1]
         self.acc = acc[:, 0]
         return self.acc, self.acc_chance
