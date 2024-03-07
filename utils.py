@@ -71,14 +71,16 @@ def read_nhp_sequence(data_path, **kwargs):
     ('hand_pos', 'x'):temp[:,0],
     ('hand_pos', 'y'):temp[:,1],
     ('hand_vel', 'x'):temp[:,2],
-    ('hand_vel', 'y'):temp[:,3]
+    ('hand_vel', 'y'):temp[:,3], 
+    ('hand_spd', ''):temp[:, 4]
     })
     # rename last event
-    trial_info['last_event'].replace(1, 'END_TRIAL', inplace=True)
-    trial_info['last_event'].replace(2, 'TIMEOUT', inplace=True)
-    trial_info['last_event'].replace(3, 'BAD_DWELL', inplace=True)
-    trial_info['last_event'].replace(4, 'EARLY_GO', inplace=True)
-    trial_info['last_event'].replace(5, 'BAD_TARGET', inplace=True)
+    if 'last_event' in trial_info.keys():
+        trial_info['last_event'].replace(1, 'END_TRIAL', inplace=True)
+        trial_info['last_event'].replace(2, 'TIMEOUT', inplace=True)
+        trial_info['last_event'].replace(3, 'BAD_DWELL', inplace=True)
+        trial_info['last_event'].replace(4, 'EARLY_GO', inplace=True)
+        trial_info['last_event'].replace(5, 'BAD_TARGET', inplace=True)
 
     return D, trial_info, units
 
