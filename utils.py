@@ -72,7 +72,7 @@ def read_nhp_sequence(data_path, **kwargs):
     ('hand_pos', 'y'):temp[:,1],
     ('hand_vel', 'x'):temp[:,2],
     ('hand_vel', 'y'):temp[:,3], 
-    ('hand_spd', ''):temp[:, 4]
+    ('hand_spd', 'xy'):temp[:, 4]
     })
     # rename last event
     if 'last_event' in trial_info.keys():
