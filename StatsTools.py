@@ -5,6 +5,15 @@ from sklearn.linear_model import RidgeClassifierCV
 from sklearn.model_selection import KFold
 from scipy.signal import savgol_filter
 from scipy.optimize import nnls
+from sklearn.model_selection import KFold
+from tqdm import tqdm
+from PcmPy.regression import RidgeDiag
+from scipy.io import loadmat
+from scipy.signal import resample
+import pandas as pd
+import mat73 as mat73
+import os
+import yaml
 
 class VarDecompose():
     """ 
@@ -194,3 +203,106 @@ class TimePointClassifier():
             score.append(clf.score(X_test, y_test))
         score = np.mean(score)
         return score
+    
+# Runs a family of models on every timepoint
+class Model():
+    def __init__(self,name, M, fit_intercept, **kwargs):
+        self.name = name
+        self.M = M
+        self.num_sample = M.shape[0]
+        self.num_feature = M.shape[1]
+        self.fit_intercept = fit_intercept
+        self.feature_indicator = kwargs.get('feature_indicator', np.zeros((M.shape[1],),dtype = np.int8))
+        print("Model ", self.name, "Shape of M: ",M.shape)
+
+
+    def fit(self, Y, method, **kwargs):
+        self.method = method
+        self.n_kfold = kwargs.get('n_kfold',4)
+        self.unit_eval = kwargs.get('unit_eval', False)
+        if self.method == 'RidgeCV':
+            self.n_kfold_in = kwargs.get('n_kfold_in',2)
+            self.lambda_list = kwargs.get('lambda_list', [1e-2,1e-1,1,1e1,1e2, 1e3])
+            self.fit_score = kwargs.get('fit_score', 'r')
+            # Select the scorer for inter kfold
+            if self.fit_score == 'r':
+                scorer = make_scorer(r)
+            elif self.fit_score == 'r2':
+                scorer = make_scorer(R2)
+            else:
+                print("Enter a valid score name (r or r2)")
+
+        num_time_sample = Y.shape[1]
+        self.num_units = Y.shape[-1]
+        # Zeros for validation results
+        if self.unit_eval:
+            self.r = np.zeros((self.n_kfold, num_time_sample, self.num_units))
+            self.R2 = np.zeros((self.n_kfold, num_time_sample, self.num_units))
+        else:
+            self.r = np.zeros((self.n_kfold, num_time_sample, 1))
+            self.R2 = np.zeros((self.n_kfold, num_time_sample, 1))
+
+        # Fit the model
+        # Fit with Cross-validated ridge
+        if self.method == 'RidgeCV':
+            for T in tqdm(range(num_time_sample)):
+                YY = np.squeeze(Y[:, T, :])
+                # k_fold cv
+                kf = KFold(n_splits=self.n_kfold, shuffle=True)
+                fold_count = 0
+                for train_index, test_index in kf.split(self.M):
+                    X_train, X_test = self.M[train_index], self.M[test_index]
+                    y_train, y_test = YY[train_index], YY[test_index]
+
+                    ridge = RidgeCV(alphas=self.lambda_list, fit_intercept= self.fit_intercept, cv=self.n_kfold_in, scoring = scorer)
+                    ridge.fit(X_train, y_train)
+                    y_pred = ridge.predict(X_test)
+                    self.r[fold_count, T, :] =  r(y_test, y_pred, unit_eval = self.unit_eval)
+                    self.R2[fold_count, T, :] =  R2(y_test, y_pred, unit_eval = self.unit_eval)
+                    fold_count += 1
+
+        # Fit with PCM
+        if self.method == 'PCM':
+            for T in tqdm(range(num_time_sample)):
+                YY = np.squeeze(Y[:, T, :])
+                # k_fold cv
+                kf = KFold(n_splits=self.n_kfold, shuffle=True)
+                fold_count = 0
+                for train_index, test_index in kf.split(self.M):
+                    X_train, X_test = self.M[train_index], self.M[test_index]
+                    y_train, y_test = YY[train_index], YY[test_index]
+                    PCMReg = RidgeDiag(self.feature_indicator, fit_intercept = self.fit_intercept)
+                    # Find optimal regularizatoni parameter
+                    PCMReg.optimize_regularization(X_train, y_train)
+                    PCMReg.theta = PCMReg.theta_ # This will be deprecated after fixing the bug in PCM toolbox
+                    PCMReg.fit(X_train, y_train, X=None)
+                    if self.fit_intercept:
+                        y_pred = PCMReg.predict(X_test) + PCMReg.beta_
+                    else:
+                        y_pred = PCMReg.predict(X_test)
+                    self.r[fold_count, T, :] =  r(y_test, y_pred, unit_eval = self.unit_eval)
+                    self.R2[fold_count, T, :] =  R2(y_test, y_pred, unit_eval = self.unit_eval)
+                    fold_count += 1
+        self.r = np.mean(self.r, axis=0)
+        self.R2 = np.mean(self.R2, axis=0)
+
+# Check this R2 value (subtract the mean?)
+def R2(Y_true,  Y_pred, **kwargs):
+    unit_eval = kwargs.get('unit_eval', False)
+    if unit_eval:
+        SSR = np.sum((Y_true - Y_pred)**2, axis=0)
+        SST = np.sum(Y_true**2, axis=0)
+    else:
+        SSR = np.sum((Y_true - Y_pred)**2)
+        SST = np.sum(Y_true**2)
+    return 1 - (SSR/SST)
+
+
+
+def r(Y_true,  Y_pred, **kwargs):
+    unit_eval = kwargs.get('unit_eval', False)
+    if unit_eval:
+        r_val = np.sum(Y_true * Y_pred, axis=0)/np.sqrt( np.sum( Y_true**2, axis=0) * np.sum( Y_pred**2, axis=0))
+    else:
+        r_val = np.sum(Y_true * Y_pred)/np.sqrt( np.sum( Y_true**2) * np.sum( Y_pred**2) )
+    return r_val
