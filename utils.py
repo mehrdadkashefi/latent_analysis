@@ -23,6 +23,14 @@ def resample(Data, timestamps):
 
 
 def read_mc_maze(data_path):
+    """ Read the data from the NHP maze task 
+    Args:
+        data_path (str): Path to the data set 
+    Returns:
+        D (df): Data frame of the continuous data (Hand pos, Hand vel, etc.)
+        trial_info (df): Davta frame of the trial information (Start time, end time, etc.)
+        units (df): Data frame of the units (Spike times, KS label, etc.)
+    """
     data = NWBHDF5IO(data_path, "r").read()
     D = pd.DataFrame({
                     ('cursor_pos', 'x'):resample(data.processing['behavior']['cursor_pos'].data[:,0], data.processing['behavior']['cursor_pos'].timestamps[:]).reshape(-1, ),
