@@ -1,6 +1,5 @@
 __pycache__/
 .DS_Store
-000128/
-000129/
+datasets/
 dump/
 figures/

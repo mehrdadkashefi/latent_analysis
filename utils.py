@@ -22,7 +22,55 @@ def resample(Data, timestamps):
     return temp_resampled['Data'].to_numpy()
 
 
+def read_point2point(data_path, **kwargs):
+    """ Read the data from point2point task 
+    Args:
+        data_path (str): Path to the data set 
+    Returns:
+        D (df): Data frame of the continuous data (Hand pos, Hand vel, etc.)
+        trial_info (df): Davta frame of the trial information (Start time, end time, etc.)
+        units (df): Data frame of the units (Spike times, KS label, etc.)
+    """
+    KSGood_only = kwargs.get('KSGood_only', False)   # Radius of the target
+    KSVersion = kwargs.get('KSVersion', 4)   # Which version of Kilosort to use
+
+    trial_info = pd.read_csv(os.path.join(data_path, "trial_info.csv"))
+    # rename last event
+    if 'last_event' in trial_info.keys():
+        trial_info['last_event'].replace(1, 'END_TRIAL', inplace=True)
+        trial_info['last_event'].replace(2, 'TIMEOUT', inplace=True)
+        trial_info['last_event'].replace(3, 'BAD_DWELL', inplace=True)
+        trial_info['last_event'].replace(4, 'EARLY_GO', inplace=True)
+
+
+    D = loadmat(os.path.join(data_path, "D.mat"))['D']
+    D = pd.DataFrame({
+        ('hand_pos', 'x'):D[:,0],
+        ('hand_pos', 'y'):D[:,1],
+        ('hand_vel', 'x'):D[:,2],
+        ('hand_vel', 'y'):D[:,3], 
+        ('hand_spd', 'xy'):D[:, 4]
+        })
+    
+
+    if KSVersion == 4:
+        units = pd.read_pickle(os.path.join(data_path,  "units_ks40.pkl"))
+    elif KSVersion == 2:
+        units = pd.read_pickle(os.path.join(data_path,  "units_ks20.pkl"))
+    if KSGood_only:
+        units = units.loc[units.KSLabel == 'good', :]
+
+    return D, trial_info, units
+
 def read_mc_maze(data_path):
+    """ Read the data from the NHP maze task 
+    Args:
+        data_path (str): Path to the data set 
+    Returns:
+        D (df): Data frame of the continuous data (Hand pos, Hand vel, etc.)
+        trial_info (df): Davta frame of the trial information (Start time, end time, etc.)
+        units (df): Data frame of the units (Spike times, KS label, etc.)
+    """
     data = NWBHDF5IO(data_path, "r").read()
     D = pd.DataFrame({
                     ('cursor_pos', 'x'):resample(data.processing['behavior']['cursor_pos'].data[:,0], data.processing['behavior']['cursor_pos'].timestamps[:]).reshape(-1, ),
