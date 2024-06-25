@@ -56,15 +56,21 @@ def read_nhp_sequence(data_path, **kwargs):
     """
     KSGood_only = kwargs.get('KSGood_only', False)   # Radius of the target
     KSVersion = kwargs.get('KSVersion', 4)   # Which version of Kilosort to use
-
     trial_info = pd.read_csv(data_path + "trial_info.csv")
-    if KSVersion == 4:
-        units = pd.read_pickle(data_path + "units_ks40.pkl")
-    elif KSVersion == 2:
-        units = pd.read_pickle(data_path + "units_ks20.pkl")
 
-    if KSGood_only:
-        units = units.loc[units.KSLabel == 'good', :]
+    # check if file exists 
+    if os.path.isfile(data_path + "units_ks40.csv") or os.path.isfile(data_path + "units_ks20.csv"):
+        if KSVersion == 4:
+            units = pd.read_pickle(data_path + "units_ks40.pkl")
+        elif KSVersion == 2:
+            units = pd.read_pickle(data_path + "units_ks20.pkl")
+
+        if KSGood_only:
+            units = units.loc[units.KSLabel == 'good', :]
+    else:
+        print('Found no units_ksxx.pkl file!')
+        print('Check your dataset directory if you were expecting neural data!')
+        units = []
 
     temp = loadmat(data_path + "D.mat")['D']
     D = pd.DataFrame({
