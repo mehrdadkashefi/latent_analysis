@@ -329,6 +329,34 @@ class Analysis_tools():
             
         return np.vstack(data_aligned)
     
+    def align_stem(self, trial_info, units, condition_columns, align_column, unit, t_range):
+        """ Aligns units firing rate on a specific event 
+        """
+        conds = trial_info.set_index(condition_columns).index.unique().tolist()
+        data_aligned = np.zeros((len(conds),t_range[1] - t_range[0], len(unit)))
+
+        #for cond_i, cond in enumerate(conds):
+        def par_fuction_over_cond(cond):
+            # Make a mask to select desired trials
+            mask = np.all(trial_info[condition_columns] == cond, axis=1)
+            mask_idx = np.where(mask)[0]
+            # event code time reletive to trial start
+            event_times = trial_info.iloc[mask_idx][align_column].to_numpy()
+            # Allocate space for trials of the condition
+            data_temp = np.zeros((len(event_times) ,t_range[1] - t_range[0], len(unit)))
+            
+            for u_i, u in enumerate(unit):
+                # Loop over trials of the same conditioin
+                for i, tev in enumerate(event_times):
+                    data_temp[i, :, u_i] = self.get_stem(units, u, [tev + (t_range[0]/self.fs) , tev + (t_range[1]/self.fs)], plot=False, return_padded=False)
+            else:
+                return data_temp
+        
+        with multiprocess.Pool(processes=10) as pool:
+            data_aligned = pool.map(par_fuction_over_cond, conds)
+            
+        return np.vstack(data_aligned)
+    
 class Kernel_Gaussian():
     def __init__(self,x_range, y_range, n_kernel, S, do_plot):
 
