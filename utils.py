@@ -37,10 +37,10 @@ def read_point2point(data_path, **kwargs):
     trial_info = pd.read_csv(os.path.join(data_path, "trial_info.csv"))
     # rename last event
     if 'last_event' in trial_info.keys():
-        trial_info['last_event'].replace(1, 'END_TRIAL', inplace=True)
-        trial_info['last_event'].replace(2, 'TIMEOUT', inplace=True)
-        trial_info['last_event'].replace(3, 'BAD_DWELL', inplace=True)
-        trial_info['last_event'].replace(4, 'EARLY_GO', inplace=True)
+        trial_info['last_event'] = trial_info['last_event'].replace(1, 'END_TRIAL')
+        trial_info['last_event'] = trial_info['last_event'].replace(2, 'TIMEOUT')
+        trial_info['last_event'] = trial_info['last_event'].replace(3, 'BAD_DWELL')
+        trial_info['last_event'] = trial_info['last_event'].replace(4, 'EARLY_GO')
 
 
     D = loadmat(os.path.join(data_path, "D.mat"))['D']
@@ -130,11 +130,11 @@ def read_nhp_sequence(data_path, **kwargs):
     })
     # rename last event
     if 'last_event' in trial_info.keys():
-        trial_info['last_event'].replace(1, 'END_TRIAL', inplace=True)
-        trial_info['last_event'].replace(2, 'TIMEOUT', inplace=True)
-        trial_info['last_event'].replace(3, 'BAD_DWELL', inplace=True)
-        trial_info['last_event'].replace(4, 'EARLY_GO', inplace=True)
-        trial_info['last_event'].replace(5, 'BAD_TARGET', inplace=True)
+        trial_info['last_event'] = trial_info['last_event'].replace(1, 'END_TRIAL')
+        trial_info['last_event'] = trial_info['last_event'].replace(2, 'TIMEOUT')
+        trial_info['last_event'] = trial_info['last_event'].replace(3, 'BAD_DWELL')
+        trial_info['last_event'] = trial_info['last_event'].replace(4, 'EARLY_GO')
+        trial_info['last_event'] = trial_info['last_event'].replace(4, 'BAD_TARGET')
 
     return D, trial_info, units
 
@@ -183,9 +183,6 @@ def read_mc_rtt(data_path):
     units = units.drop(labels='electrodes', axis=1)
     return D, trial_info, units
     
-
-#data_path = "./000128/sub-Jenkins/sub-Jenkins_ses-full_desc-train_behavior+ecephys.nwb"
-#D, trial_info, units = read_mc_maze(data_path)
 
 
 ######### Tools for data analysis #########
