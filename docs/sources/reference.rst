@@ -4,4 +4,4 @@ API reference
 .. toctree::
    :maxdepth: 2
 
-   reference_util.rst
+   reference_utis.rst
