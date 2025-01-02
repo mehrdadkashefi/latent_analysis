@@ -1,3 +1,9 @@
+"""
+Collection of different functions and tools for reading data from different tasks and tools for data analysis
+
+@Author: Mehrdad Kashefi
+"""
+
 import os
 import sys
 import numpy as np
@@ -11,9 +17,17 @@ import multiprocess
 from functools import partial
 from scipy.io import loadmat
 
-######### Read data #########
 
 def resample(Data, timestamps):
+    """ Resamples using a linear interpolation 
+    Args:
+        Data (np.array)
+            Data to be resampled
+        timestamps (np.array)
+            Timestamps for the data
+    Returns:
+        resampled_data (np.array)
+    """
     temp = pd.DataFrame({('Data', 'x'):Data})
     temp['timestamps'] = pd.to_datetime(timestamps, unit='s')
     temp.set_index('timestamps', inplace=True)
@@ -25,11 +39,15 @@ def resample(Data, timestamps):
 def read_point2point(data_path, **kwargs):
     """ Read the data from point2point task 
     Args:
-        data_path (str): Path to the data set 
+        data_path (str)
+            Path to the data set 
     Returns:
-        D (df): Data frame of the continuous data (Hand pos, Hand vel, etc.)
-        trial_info (df): Davta frame of the trial information (Start time, end time, etc.)
-        units (df): Data frame of the units (Spike times, KS label, etc.)
+        D (df)
+            Data frame of the continuous data (Hand pos, Hand vel, etc.)
+        trial_info (df)
+            Data frame of the trial information (Start time, end time, etc.)
+        units (df)
+            Data frame of the units (Spike times, KS label, etc.)
     """
     KSGood_only = kwargs.get('KSGood_only', False)   # Radius of the target
     KSVersion = kwargs.get('KSVersion', 4)   # Which version of Kilosort to use
@@ -42,7 +60,6 @@ def read_point2point(data_path, **kwargs):
         trial_info['last_event'] = trial_info['last_event'].replace(3, 'BAD_DWELL')
         trial_info['last_event'] = trial_info['last_event'].replace(4, 'EARLY_GO')
 
-
     D = loadmat(os.path.join(data_path, "D.mat"))['D']
     D = pd.DataFrame({
         ('hand_pos', 'x'):D[:,0],
@@ -52,7 +69,6 @@ def read_point2point(data_path, **kwargs):
         ('hand_spd', 'xy'):D[:, 4]
         })
     
-
     if KSVersion == 4:
         units = pd.read_pickle(os.path.join(data_path,  "units_ks40.pkl"))
     elif KSVersion == 2:
@@ -65,11 +81,15 @@ def read_point2point(data_path, **kwargs):
 def read_mc_maze(data_path):
     """ Read the data from the NHP maze task 
     Args:
-        data_path (str): Path to the data set 
+        data_path (str)
+            Path to the data set 
     Returns:
-        D (df): Data frame of the continuous data (Hand pos, Hand vel, etc.)
-        trial_info (df): Davta frame of the trial information (Start time, end time, etc.)
-        units (df): Data frame of the units (Spike times, KS label, etc.)
+        D (df)
+            Data frame of the continuous data (Hand pos, Hand vel, etc.)
+        trial_info (df)
+            Data frame of the trial information (Start time, end time, etc.)
+        units (df)
+            Data frame of the units (Spike times, KS label, etc.)
     """
     data = NWBHDF5IO(data_path, "r").read()
     D = pd.DataFrame({
@@ -95,12 +115,15 @@ def read_mc_maze(data_path):
 def read_nhp_sequence(data_path, **kwargs):
     """ Read the data from the NHP sequence task 
     Args:
-        data_path (str): Path to the data set 
-        KSGood_only (bool): If True, only use units with good KS label will be loaded
+        data_path (str)
+            Path to the data set 
     Returns:
-        D (df): Data frame of the continuous data (Hand pos, Hand vel, etc.)
-        trial_info (df): Data frame of the trial information (Start time, end time, etc.)
-        units (df): Data frame of the units (Spike times, KS label, etc.)
+        D (df)
+            Data frame of the continuous data (Hand pos, Hand vel, etc.)
+        trial_info (df)
+            Data frame of the trial information (Start time, end time, etc.)
+        units (df)
+            Data frame of the units (Spike times, KS label, etc.)
     """
     KSGood_only = kwargs.get('KSGood_only', False)   # Radius of the target
     KSVersion = kwargs.get('KSVersion', 4)   # Which version of Kilosort to use
@@ -139,6 +162,18 @@ def read_nhp_sequence(data_path, **kwargs):
     return D, trial_info, units
 
 def read_mc_rtt(data_path):
+    """ Read the data from the NHP random target reaching task
+    Args:
+        data_path (str)
+            Path to the data set 
+    Returns:
+        D (df)
+            Data frame of the continuous data (Hand pos, Hand vel, etc.)
+        trial_info (df)
+            Data frame of the trial information (Start time, end time, etc.)
+        units (df)
+            Data frame of the units (Spike times, KS label, etc.)
+    """
     data = NWBHDF5IO(data_path, "r").read()
     D = pd.DataFrame({
                         ('cursor_pos', 'x'):data.processing['behavior']['cursor_pos'].data[:,0].reshape(-1, ),
@@ -175,8 +210,6 @@ def read_mc_rtt(data_path):
     # Remove the first trial: bad from traget
     trial_info = trial_info.drop(index=trial_info.index[0], axis=0)
 
-
-
     units = data.units.to_dataframe()
     units = units.drop(labels='obs_intervals', axis=1)
     units['location'] = [units.loc[u].electrodes.iloc[0].location for u in units.index]
@@ -184,16 +217,35 @@ def read_mc_rtt(data_path):
     return D, trial_info, units
     
 
-
 ######### Tools for data analysis #########
 class Analysis_tools():
-    """ Class for tools often required for data analysis
+    """ 
+    Class for tools often required for data analysis
     """
     def __init__(self, fs):
         self.fs = fs
 
     def get_stem(self, units, which_unit, t,  **kwargs):
-        """ Get spike times for a specific unit, during a specific time
+        """ Get spike times for a specific unit, in a specific time range
+        Args:
+            units (df)
+                Data frame of the units (Spike times, KS label, etc.)
+            which_unit (int)
+                Which unit to get the spike times
+            t (list)
+                Time range to get the spike times
+        Kwargs:
+            df (float)
+                Step size, default is 1/1000
+            t_pad (float)
+                How many seconds to pad the data from before and after the trial, default is 0.5
+            plot (bool)
+                Plot the single trial, default is False
+            return_padded (bool)
+                Whether to include padded data in return, default is False
+        Returns:
+            stem (np.array)
+                Spike times for the specific unit, in the specific time range
         """
         self.dt = kwargs.get('dt', 1/1000)   # Step size 
         self.t_pad = kwargs.get('t_pad', 0.5)   # How many seconds to pad the data from before and after the trial 
@@ -229,6 +281,27 @@ class Analysis_tools():
     
     def get_fr(self, which_unit, units, t, **kwargs):
         """ Get firing rate for a specific unit, during a specific time
+        Args:
+            which_unit (int)
+                Which unit to get the spike times
+            units (df)
+                Data frame of the units (Spike times, KS label, etc.)
+            t (list)
+                Time range to get the spike times
+        Kwargs:
+            gauss_width (int)
+                Window size for the Gaussian window, default is 50
+            dt (float)
+                Step size, default is 1/1000
+            t_pad (float)
+                How many seconds to pad the data from before and after the trial, default is 0.5
+            plot (bool)
+                Plot the single trial, default is False
+            return_padded (bool)
+                Whether to include padded data in return, default is False
+        Returns:
+            FR (np.array)
+                Continuous firing rate for the specific unit, in the specific time range
         """
         self.gauss_width = kwargs.get('gauss_width', 50)   # Window size 50 ms
         self.dt = kwargs.get('dt', 1/1000)   # Step size 
@@ -263,6 +336,28 @@ class Analysis_tools():
     
     def align_continuous(self, trial_info, D, condition_columns, align_column, channel_column, t_range, return_mean = True):
         """ Aligns continuous data on a specific event 
+        Args:
+            trial_info (df)
+                Data frame of the trial information (Start time, end time, etc.)
+            D (df)
+                Data frame of the continuous data (Hand pos, Hand vel, etc.)
+            condition_columns (list)
+                Columns to group the data
+            align_column (str)
+                Column to align the data on
+            channel_column (str)
+                Which data column is selected
+            t_range (list)
+                Time range to align the data
+            return_mean (bool)
+                Whether to return the mean of trials of a condition, default is True
+        Returns:
+            data_aligned (np.array)
+                Aligned data (condition x time x channel)
+            conds (np.array)
+                Unique conditions
+            aligned_trials_type (np.array)
+                Type of the trials
         """
         conds = trial_info.set_index(condition_columns).index.unique().tolist()
         data_aligned = np.zeros((len(conds),t_range[1] - t_range[0], len(D[channel_column].columns)))
@@ -298,6 +393,24 @@ class Analysis_tools():
      
     def align_fr(self, trial_info, units, condition_columns, align_column, unit, t_range, return_mean = True):
         """ Aligns units firing rate on a specific event 
+        Args:
+            trial_info (df)
+                Data frame of the trial information (Start time, end time, etc.)
+            units (df)
+                Data frame of the units (Spike times, KS label, etc.)
+            condition_columns (list)
+                Columns to group the data
+            align_column (str)
+                Column to align the data on
+            unit (list)
+                Which unit to get the spike times
+            t_range (list)
+                Time range to align the data
+            return_mean (bool)
+                Whether to return the mean of trials of a condition, default is True
+        Returns: 
+            data_aligned (np.array)
+                Aligned data (condition x time x unit)
         """
         conds = trial_info.set_index(condition_columns).index.unique().tolist()
         data_aligned = np.zeros((len(conds),t_range[1] - t_range[0], len(unit)))
@@ -328,6 +441,22 @@ class Analysis_tools():
     
     def align_stem(self, trial_info, units, condition_columns, align_column, unit, t_range):
         """ Aligns units firing rate on a specific event 
+        Args:
+            trial_info (df)
+                Data frame of the trial information (Start time, end time, etc.)
+            units (df)
+                Data frame of the units (Spike times, KS label, etc.)
+            condition_columns (list)
+                Columns to group the data
+            align_column (str)
+                Column to align the data on
+            unit (list)
+                Which unit to get the spike times
+            t_range (list)
+                Time range to align the data
+        Returns:
+            data_aligned (np.array)
+                Aligned data (condition x time x unit)
         """
         conds = trial_info.set_index(condition_columns).index.unique().tolist()
         data_aligned = np.zeros((len(conds),t_range[1] - t_range[0], len(unit)))
@@ -356,7 +485,19 @@ class Analysis_tools():
     
 class Kernel_Gaussian():
     def __init__(self,x_range, y_range, n_kernel, S, do_plot):
-
+        """ Class for generaing 2D Gaussian Kernels
+        Args:
+            x_range (list)
+                Range of x values
+            y_range (list)
+                Range of y values
+            n_kernel (int)
+                Number of kernels
+            S (np.array)
+                Covariance matrix for each Gaussian kernel (2x2)
+            do_plot (bool)
+                Whether to plot the kernels
+        """
         self.x_range = x_range
         self.y_range = y_range
         self.n_kernel = n_kernel
@@ -391,6 +532,16 @@ class Kernel_Gaussian():
             ax.set_zlabel('Feature Value')
 
     def encode(self,x,y):
+        """ Encode the data using the Gaussian Kernels
+        Args:
+            x (np.array)
+                X values
+            y (np.array)
+                Y values
+        Returns:
+            M (np.array)
+                Encoded data
+        """
         M = np.zeros((x.shape[0], len(self.centers)))
         for K in range(len(self.centers)):
             mu = self.centers[K,:]
@@ -400,6 +551,13 @@ class Kernel_Gaussian():
 
 class Kernel_Cosine():
     def __init__(self, n_cos, clip_neg):
+        """ Class for generating Cosine Kernels
+        Args:
+            n_cos (int)
+                Number of cosine kernels
+            clip_neg (bool)
+                Whether to clip the negative values
+        """
         self.n_cos = n_cos
         self.phase_steps = np.linspace((2*np.pi)/n_cos, 2*np.pi, n_cos)
         self.clip_neg = clip_neg
@@ -416,6 +574,14 @@ class Kernel_Cosine():
         plt.xlabel('Angle (deg)')
 
     def encode(self, A):
+        """ Encode the data using the Cosine Kernels
+        Args:
+            A (np.array)
+                Data to be encoded
+        Returns:
+            M (np.array)
+                Encoded data
+        """
         M = np.zeros((A.shape[0], len(self.phase_steps)))
         for count, ang in enumerate(self.phase_steps):
             M[:, count] = np.cos(A - ang)
@@ -427,4 +593,3 @@ class Kernel_Cosine():
             print('Rank of M: ', np.linalg.matrix_rank(M))
 
         return M
-
