@@ -1,3 +1,6 @@
+sphinx>=1.4
+sphinxcontrib-bibtex
+sphinx-copybutton
 os
 sys
 tqdm
@@ -13,4 +16,3 @@ PcmPy
 mat73
 pynwb
 functools
-
