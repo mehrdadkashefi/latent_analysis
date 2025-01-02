@@ -12,8 +12,9 @@
 #
 import os
 import sys
-sys.path.insert(0, os.path.abspath(os.path.dirname('..')))
-sys.path.insert(0, os.path.join(os.path.dirname('..'), 'latent_analysis'))
+two_path_ago = os.path.dirname(os.path.dirname(os.getcwd()))
+sys.path.insert(0, two_path_ago)
+sys.path.insert(0, os.path.join(two_path_ago, 'latent_analysis'))
 
 # -- Project information -----------------------------------------------------
 
