@@ -11,6 +11,7 @@ Documentation
    :caption: Contents:
    
    installation.rst
+   reference.rst
 
 
 Indices and tables
