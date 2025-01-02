@@ -9,3 +9,10 @@ ipykernel
 nbsphinx
 scipy
 seaborn
+pynwb
+multiprocess
+functools
+
+
+
+
