@@ -12,7 +12,8 @@ import seaborn as sns
 import pynwb as nwb
 from pynwb import NWBHDF5IO
 import pandas as pd
-from scipy.signal import gaussian, convolve
+from scipy.signal import convolve
+from scipy.signal.windows import gaussian
 import multiprocess
 from scipy.io import loadmat
 
