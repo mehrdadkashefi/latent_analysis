@@ -7,7 +7,7 @@ pandas
 matplotlib
 ipykernel
 nbsphinx
-scipy
+scipy=1.10.0
 seaborn
 pynwb
 multiprocess
