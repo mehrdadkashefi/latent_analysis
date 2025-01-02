@@ -13,7 +13,7 @@
 import os
 import sys
 sys.path.insert(0, os.path.abspath('..'))
-sys.path.insert(0, os.path.abspath('../PcmPy'))
+sys.path.insert(0, os.path.abspath('../latent_analysis'))
 
 # -- Project information -----------------------------------------------------
 
