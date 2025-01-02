@@ -11,8 +11,6 @@ scipy
 seaborn
 pynwb
 multiprocess
-functools
-
 
 
 

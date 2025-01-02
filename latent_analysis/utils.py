@@ -14,7 +14,6 @@ from pynwb import NWBHDF5IO
 import pandas as pd
 from scipy.signal import gaussian, convolve
 import multiprocess
-from functools import partial
 from scipy.io import loadmat
 
 
