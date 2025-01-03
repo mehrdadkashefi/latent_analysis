@@ -1,19 +1,19 @@
+"""
+Collection of tools for statistical analysis of neural data
+@Author: Mehrdad Kashefi
+"""
 import numpy as np
 import matplotlib.pyplot as plt
 import multiprocess
 from sklearn.linear_model import RidgeClassifierCV
 from sklearn.model_selection import KFold
+from sklearn.metrics import make_scorer
 from scipy.signal import savgol_filter
 from scipy.optimize import nnls
 from sklearn.model_selection import KFold
 from tqdm import tqdm
 from PcmPy.regression import RidgeDiag
-from scipy.io import loadmat
-from scipy.signal import resample
-import pandas as pd
 import mat73 as mat73
-import os
-import yaml
 
 class VarDecompose():
     """ 
@@ -26,6 +26,13 @@ class VarDecompose():
         VarDec = ST.VarDecompose(Indicators, ortho_ineraction=True, verbose=1)
         tss, fss =  VarDec.fit(Y) 
         VarDec.plot(width=4, height=3, save_dir=current_script_path)
+    Args:
+        Indicators (dict)
+            A dictionary of indicator variables 
+        ortho_ineraction (bool)
+            If True, the interaction terms will be orthogonalized
+        verbose (bool)
+            If True, the covariance matrices will be plotted
     """
     def __init__(self, Indicators, ortho_ineraction = 1,  verbose=1):
         # Define model covariance G_m
@@ -47,6 +54,16 @@ class VarDecompose():
             self.G_m.plot()
 
     def fit(self, Y):
+        """ Fit the model to the data
+        Args:
+            Y (np.array)
+                The hidden data (num_conditions, num_timepoints, num_hidden_variables)
+        Returns:
+            tss (np.array)
+                Total variance of hidden variables
+            fss (np.array)
+                Explained variance by each model
+        """
         self.num_cond = Y.shape[0]
         X = np.zeros((self.num_cond**2, self.G_m.num_models))
         for i, g in enumerate(self.G_m.G):
@@ -70,6 +87,17 @@ class VarDecompose():
         return self.tss, self.fss
     
     def plot(self, **kwargs):
+        """ Plot the results
+        Kwargs:
+            width (int)
+                Width of the figure, default is 15
+            height (int)
+                Height of the figure, default is 5
+            save_dir (str)
+                Directory to save the figures
+            name (str)
+                Name of the figures
+        """
         width = kwargs.get('width', 15)
         height = kwargs.get('height', 5)
         save_dir = kwargs.get('save_dir', None)
@@ -145,15 +173,32 @@ class TimePointClassifier():
     Example:
         TClassifier = ST.TimepointClassifier()
         acc, acc_chance =  TClassifier.fit(X, y) 
+    Args:
+        num_fold (int)
+            Number of folds for cross-validation, default is 5
+        num_core (int)
+            Number of cores for parallel processing, default is 10
+        num_sampling_rep (int)
+            Number of sampling repetitions, default is 30
     """
-    def __init__(self,predictor_name, class_name, num_fold = 5, num_core = 10, num_sampling_rep = 30):
-        self.predictor_name = predictor_name
-        self.predictor_name = class_name
+    def __init__(self, num_fold = 5, num_core = 10, num_sampling_rep = 30):
         self.num_fold = num_fold
         self.num_sampling_rep = num_sampling_rep
         self.num_core = num_core
   
     def fit(self, X, y):
+        """ Run the classification models on every timepoint
+        Args:
+            X (np.array)
+                The continuous data (num_conditions, num_timepoints, num_variables)
+            y (np.array)
+                The associated class value (num_conditions, )
+        Returns:
+            acc (np.array)
+                Accuracy of the model
+            acc_chance (np.array)
+                Chance level accuracy
+        """
         self.X = X
         self.y = y
         
@@ -206,6 +251,18 @@ class TimePointClassifier():
     
 # Runs a family of models on every timepoint
 class Model():
+    """ RUN RMD-like models on each time point
+    Args:
+        name (str)
+            Name of the model
+        M (np.array)
+            The model matrix (num_samples, num_features)
+        fit_intercept (bool)
+            If True, the model will fit an intercept
+    Kwargs:
+        feature_indicator (np.array)
+            A binary array indicating the features that should be included in the model
+    """
     def __init__(self,name, M, fit_intercept, **kwargs):
         self.name = name
         self.M = M
@@ -217,6 +274,24 @@ class Model():
 
 
     def fit(self, Y, method, **kwargs):
+        """ Fit the model to the data on each timepoint
+        Args:
+            Y (np.array)
+                The hidden data (num_conditions, num_timepoints, num_hidden_variables)
+            method (str)
+                The method of fitting the model
+        Kwargs:
+            n_kfold (int)
+                Number of folds for cross-validation, default is 4
+            unit_eval (bool)
+                If True, the evaluation will be done on each unit, default is False
+            n_kfold_in (int)
+                Number of folds for inner cross-validation, default is 2
+            lambda_list (list)
+                List of regularization parameters, default is [1e-2,1e-1,1,1e1,1e2, 1e3]
+            fit_score (str)
+                The score for fitting the model, default is 'r'
+        """
         self.method = method
         self.n_kfold = kwargs.get('n_kfold',4)
         self.unit_eval = kwargs.get('unit_eval', False)

@@ -1,3 +1,7 @@
+"""
+Collection of tools for linear dimensionality reduction methods of neural data
+@Author: Mehrdad Kashefi
+"""
 import numpy as np
 from sklearn.decomposition import FactorAnalysis
 import matplotlib.pyplot as plt
@@ -6,14 +10,25 @@ import seaborn as sns
 import pandas as pd
 from dPCA import dPCA as dpca
 from scipy.optimize import minimize, NonlinearConstraint
-from scipy.optimize import nnls
 
 
 class Transform():
+    """ Base class for linear dimensionality reduction methods
+    Args:
+        num_latent (int)
+            number of latent dimensions
+    """
     def __init__(self, num_latent):
         self.num_latent = num_latent
 
     def fit(self, X, method):
+        """ Fit the model to the data
+        Args: 
+            X (np.array)
+                data to fit the model (Samples x Units)
+            method (str)
+                method to use for dimensionality reduction (PCA or FA)
+        """
         dims = X.shape
         if len(dims)>2:
             #print('Found tensor- Reshaping data to -1, num_unit')
@@ -38,6 +53,16 @@ class Transform():
 
 
     def transform(self, X, ensure_orthogonality):
+        """ Transform the data to the latent space
+        Args:
+            X (np.array)
+                data to transform (Samples x Units)
+            ensure_orthogonality (bool)
+                if True, the components are orthogonalized
+        Returns:
+            Latent (np.array)
+                transformed data in the latent space (Samples x num_latent)
+        """
         dims = X.shape
         if len(dims)>2:
             #print('Found tensor- Reshaping data to -1, num_unit')
@@ -57,12 +82,25 @@ class Transform():
                 Latent = self.FA.transform(X)
                 Latent = np.reshape(Latent, newshape=dims[:-1] + (self.num_latent,))
 
-
-
         return Latent
         
 
     def plot_traj(self, X_latent, which_trials, which_times, dim = 2, color_map = None, hue = None):
+        """ Plot the latent space trajectories
+        Args:
+            X_latent (np.array)
+                Latent space data (Trials x Time x num_latent)
+            which_trials (list)
+                list of trials to plot
+            which_times (list)
+                list of time points to plot
+            dim (int)
+                dimension of the latent space (2 or 3), default 2
+            color_map (str)
+                color map to use for plotting
+            hue (np.array)
+                array of labels for coloring the trials
+        """
 
         if color_map is None:
             cm = plt.get_cmap('inferno')       
@@ -92,6 +130,15 @@ class Transform():
 
 
 class jPCA():
+    """ Class for fitting and transforming data with jPCA
+    Args:
+        num_latent (int)
+            number of latent dimensions, default 6
+        force_skewness (bool)
+            if True, the dynamical system is forced to be skew-symmetric, default True
+        align_x_axis (bool)
+            if True, the jPCA axes are aligned with the x-axis, default True
+    """
     def __init__(self, **kwargs):
         self.num_comp_pc = kwargs.get('num_latent', 6)
         self.force_skewness = kwargs.get('force_skewness', True)
@@ -99,6 +146,11 @@ class jPCA():
         
 
     def fit(self, X):
+        """ Fit the jPCA model to the data
+        Args:
+            X (np.array)
+                data to fit the model (Samples x Units)
+        """
         # Normalize data, very important!
         n_mean = np.mean(X, axis=0, keepdims=True)
         n_range = np.max(np.vstack(X), axis=0, keepdims=True) - np.min(np.vstack(X), axis=0, keepdims=True)
@@ -139,6 +191,14 @@ class jPCA():
         self.jpca_w = np.real(np.concatenate((v1, v2), axis=1))/np.sqrt(2)
 
     def transform(self, X):
+        """ Transform the data to the jPCA space
+        Args:
+            X (np.array)
+                data to transform (Samples x Units)
+        Returns:
+            rate_jpca (np.array)
+                transformed data in the jPCA space (Samples x num_latent)
+        """
         # Normalize data, very important!
         n_mean = np.mean(X, axis=0, keepdims=True)
         n_range = np.max(np.vstack(X), axis=0, keepdims=True) - np.min(np.vstack(X), axis=0, keepdims=True)
@@ -166,8 +226,17 @@ class jPCA():
         return 1 - np.sum((y_true - y_pred)**2)/np.sum((y_true - np.mean(y_true))**2)    
     # Helper functions for getting the skew-symmetric matrix    
     def skew_sym_regress(self, X, X_dot, tol=1e-4):
-        """
-        Fits a skew-symmetric matrix M to the data X_dot = X @ M.T
+        """ Fits a skew-symmetric matrix M to the data X_dot = X @ M.T
+        Args:
+            X (np.array)
+                data (Samples x Units)
+            X_dot (np.array)
+                derivative of the data (Samples x Units)
+            tol (float)
+                tolerance for the optimization, default 1e-4
+        Returns:
+            M (np.array)
+                skew-symmetric matrix
         """
         def _objective(h, X, X_dot):
             _, N = X.shape
@@ -212,6 +281,15 @@ class jPCA():
         return M.T
     
 class dPCA():
+    """ Class for fitting and transforming data with dPCA, using dPCA toolbox
+    Args:
+        n_components (int)
+            number of latent dimensions, default 5
+        soft_norm_value (float)
+            soft normalization value, default 5
+        plot (bool)
+            if True, plot the explained variance, default True
+    """
     def __init__(self, n_components, **kwargs):
         self.n_components = n_components
         self.soft_norm_value = kwargs.get('soft_norm_value', 5)
@@ -223,6 +301,11 @@ class dPCA():
         self.X_norm = (X - units_mean)/(n_range + self.soft_norm_value)
 
     def fit(self, X):
+        """ Fit the dPCA model to the data
+        Args:
+            X (np.array)
+                data to fit the model (Samples x Unit x Time)
+        """
         # Apply preprocessing
         self.__pre_process(X)
         # define the dPCA object
@@ -237,6 +320,14 @@ class dPCA():
         plt.show()
 
     def transform(self, X):
+        """ Transform the data to the dPCA space
+        Args:
+            X (np.array)
+                data to transform (Samples x Units x Time)
+        Returns:
+            Z (np.array)
+                transformed data in the dPCA space (Time x Samples x num_lat
+        """
         # Apply preprocessing
         self.__pre_process(X)  
         Z = self.dpca.transform(self.X_norm.transpose(2,0,1))
@@ -255,6 +346,15 @@ class dPCA():
         return Z
 
 class OrthogonalPCA():
+    """ Class for fitting and transforming data with Orthogonal PCs for planning and execution
+    Args:
+        n_components (int)
+            number of latent dimensions, default 5
+        soft_norm_value (float)
+            soft normalization value, default 5
+        verbose (int)
+            verbosity level, default 1
+    """
     def __init__(self, **kwargs):
         self.n_components = kwargs.get('n_components', 20)
         self.soft_norm_value = kwargs.get('soft_norm_value', 5)
@@ -266,6 +366,18 @@ class OrthogonalPCA():
         return (X - units_mean)/(n_range + self.soft_norm_value)
     
     def fit(self, data_prep, data_exe):
+        """ Fit the Orthogonal PCA model to the data
+        Args:
+            data_prep (np.array)
+                data for planning (Samples x Units)
+            data_exe (np.array)
+                data for execution (Samples x Units)
+        Returns:
+            W_p (np.array)
+                weights for planning
+            W_e (np.array)
+                weights for execution
+        """
         # Preprocess (remove condition mean and soft scaling)
         data_prep = self.pre_process(data_prep)
         data_exe = self.pre_process(data_exe)

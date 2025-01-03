@@ -1,6 +1,5 @@
 """
 Collection of different functions and tools for reading data from different tasks and tools for data analysis
-
 @Author: Mehrdad Kashefi
 """
 

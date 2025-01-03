@@ -11,6 +11,8 @@ scipy
 seaborn
 pynwb
 multiprocess
-
-
-
+scikit-learn
+tqdm
+PcmPy
+mat73
+dPCA
