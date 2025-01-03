@@ -5,3 +5,4 @@ API reference
    :maxdepth: 2
    reference_utils.rst
    reference_StatsTools.rst
+   reference_StatsTools.rst
