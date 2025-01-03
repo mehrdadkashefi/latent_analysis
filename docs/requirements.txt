@@ -16,3 +16,4 @@ tqdm
 PcmPy
 mat73
 dPCA
+numexpr
