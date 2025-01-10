@@ -14,6 +14,7 @@ from scipy.optimize import minimize, NonlinearConstraint
 
 class Transform():
     """ Base class for linear dimensionality reduction methods
+
     Args:
         num_latent (int)
             number of latent dimensions
@@ -23,6 +24,7 @@ class Transform():
 
     def fit(self, X, method):
         """ Fit the model to the data
+
         Args: 
             X (np.array)
                 data to fit the model (Samples x Units)
@@ -54,6 +56,7 @@ class Transform():
 
     def transform(self, X, ensure_orthogonality):
         """ Transform the data to the latent space
+
         Args:
             X (np.array)
                 data to transform (Samples x Units)
@@ -87,6 +90,7 @@ class Transform():
 
     def plot_traj(self, X_latent, which_trials, which_times, dim = 2, color_map = None, hue = None):
         """ Plot the latent space trajectories
+
         Args:
             X_latent (np.array)
                 Latent space data (Trials x Time x num_latent)
@@ -131,6 +135,7 @@ class Transform():
 
 class jPCA():
     """ Class for fitting and transforming data with jPCA
+
     Args:
         num_latent (int)
             number of latent dimensions, default 6
@@ -147,6 +152,7 @@ class jPCA():
 
     def fit(self, X):
         """ Fit the jPCA model to the data
+
         Args:
             X (np.array)
                 data to fit the model (Samples x Units)
@@ -192,6 +198,7 @@ class jPCA():
 
     def transform(self, X):
         """ Transform the data to the jPCA space
+
         Args:
             X (np.array)
                 data to transform (Samples x Units)
@@ -227,6 +234,7 @@ class jPCA():
     # Helper functions for getting the skew-symmetric matrix    
     def skew_sym_regress(self, X, X_dot, tol=1e-4):
         """ Fits a skew-symmetric matrix M to the data X_dot = X @ M.T
+
         Args:
             X (np.array)
                 data (Samples x Units)
@@ -282,6 +290,7 @@ class jPCA():
     
 class dPCA():
     """ Class for fitting and transforming data with dPCA, using dPCA toolbox
+
     Args:
         n_components (int)
             number of latent dimensions, default 5
@@ -302,6 +311,7 @@ class dPCA():
 
     def fit(self, X):
         """ Fit the dPCA model to the data
+
         Args:
             X (np.array)
                 data to fit the model (Samples x Unit x Time)
@@ -321,6 +331,7 @@ class dPCA():
 
     def transform(self, X):
         """ Transform the data to the dPCA space
+
         Args:
             X (np.array)
                 data to transform (Samples x Units x Time)
@@ -347,6 +358,7 @@ class dPCA():
 
 class OrthogonalPCA():
     """ Class for fitting and transforming data with Orthogonal PCs for planning and execution
+
     Args:
         n_components (int)
             number of latent dimensions, default 5
@@ -367,6 +379,7 @@ class OrthogonalPCA():
     
     def fit(self, data_prep, data_exe):
         """ Fit the Orthogonal PCA model to the data
+        
         Args:
             data_prep (np.array)
                 data for planning (Samples x Units)

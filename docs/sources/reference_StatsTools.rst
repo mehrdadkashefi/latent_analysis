@@ -1,2 +1,0 @@
-.. automodule:: StatsTools
-   :members:

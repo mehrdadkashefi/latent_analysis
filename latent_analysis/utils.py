@@ -19,6 +19,7 @@ from scipy.io import loadmat
 
 def resample(Data, timestamps):
     """ Resamples using a linear interpolation 
+
     Args:
         Data (np.array)
             Data to be resampled
@@ -37,6 +38,7 @@ def resample(Data, timestamps):
 
 def read_point2point(data_path, **kwargs):
     """ Read the data from point2point task 
+
     Args:
         data_path (str)
             Path to the data set 
@@ -79,6 +81,7 @@ def read_point2point(data_path, **kwargs):
 
 def read_mc_maze(data_path):
     """ Read the data from the NHP maze task 
+
     Args:
         data_path (str)
             Path to the data set 
@@ -113,6 +116,7 @@ def read_mc_maze(data_path):
 
 def read_nhp_sequence(data_path, **kwargs):
     """ Read the data from the NHP sequence task 
+
     Args:
         data_path (str)
             Path to the data set 
@@ -162,6 +166,7 @@ def read_nhp_sequence(data_path, **kwargs):
 
 def read_mc_rtt(data_path):
     """ Read the data from the NHP random target reaching task
+    
     Args:
         data_path (str)
             Path to the data set 
@@ -226,6 +231,7 @@ class Analysis_tools():
 
     def get_stem(self, units, which_unit, t,  **kwargs):
         """ Get spike times for a specific unit, in a specific time range
+
         Args:
             units (df)
                 Data frame of the units (Spike times, KS label, etc.)
@@ -233,7 +239,6 @@ class Analysis_tools():
                 Which unit to get the spike times
             t (list)
                 Time range to get the spike times
-        Kwargs:
             df (float)
                 Step size, default is 1/1000
             t_pad (float)
@@ -242,6 +247,7 @@ class Analysis_tools():
                 Plot the single trial, default is False
             return_padded (bool)
                 Whether to include padded data in return, default is False
+
         Returns:
             stem (np.array)
                 Spike times for the specific unit, in the specific time range
@@ -280,6 +286,7 @@ class Analysis_tools():
     
     def get_fr(self, which_unit, units, t, **kwargs):
         """ Get firing rate for a specific unit, during a specific time
+
         Args:
             which_unit (int)
                 Which unit to get the spike times
@@ -287,7 +294,6 @@ class Analysis_tools():
                 Data frame of the units (Spike times, KS label, etc.)
             t (list)
                 Time range to get the spike times
-        Kwargs:
             gauss_width (int)
                 Window size for the Gaussian window, default is 50
             dt (float)
@@ -298,6 +304,7 @@ class Analysis_tools():
                 Plot the single trial, default is False
             return_padded (bool)
                 Whether to include padded data in return, default is False
+
         Returns:
             FR (np.array)
                 Continuous firing rate for the specific unit, in the specific time range
@@ -335,6 +342,7 @@ class Analysis_tools():
     
     def align_continuous(self, trial_info, D, condition_columns, align_column, channel_column, t_range, return_mean = True):
         """ Aligns continuous data on a specific event 
+
         Args:
             trial_info (df)
                 Data frame of the trial information (Start time, end time, etc.)
@@ -350,6 +358,7 @@ class Analysis_tools():
                 Time range to align the data
             return_mean (bool)
                 Whether to return the mean of trials of a condition, default is True
+
         Returns:
             data_aligned (np.array)
                 Aligned data (condition x time x channel)
@@ -392,6 +401,7 @@ class Analysis_tools():
      
     def align_fr(self, trial_info, units, condition_columns, align_column, unit, t_range, return_mean = True):
         """ Aligns units firing rate on a specific event 
+
         Args:
             trial_info (df)
                 Data frame of the trial information (Start time, end time, etc.)
@@ -407,6 +417,7 @@ class Analysis_tools():
                 Time range to align the data
             return_mean (bool)
                 Whether to return the mean of trials of a condition, default is True
+
         Returns: 
             data_aligned (np.array)
                 Aligned data (condition x time x unit)
@@ -440,6 +451,7 @@ class Analysis_tools():
     
     def align_stem(self, trial_info, units, condition_columns, align_column, unit, t_range):
         """ Aligns units firing rate on a specific event 
+
         Args:
             trial_info (df)
                 Data frame of the trial information (Start time, end time, etc.)
@@ -453,6 +465,7 @@ class Analysis_tools():
                 Which unit to get the spike times
             t_range (list)
                 Time range to align the data
+
         Returns:
             data_aligned (np.array)
                 Aligned data (condition x time x unit)
@@ -485,6 +498,7 @@ class Analysis_tools():
 class Kernel_Gaussian():
     def __init__(self,x_range, y_range, n_kernel, S, do_plot):
         """ Class for generaing 2D Gaussian Kernels
+
         Args:
             x_range (list)
                 Range of x values
@@ -532,11 +546,13 @@ class Kernel_Gaussian():
 
     def encode(self,x,y):
         """ Encode the data using the Gaussian Kernels
+
         Args:
             x (np.array)
                 X values
             y (np.array)
                 Y values
+
         Returns:
             M (np.array)
                 Encoded data
@@ -551,6 +567,7 @@ class Kernel_Gaussian():
 class Kernel_Cosine():
     def __init__(self, n_cos, clip_neg):
         """ Class for generating Cosine Kernels
+
         Args:
             n_cos (int)
                 Number of cosine kernels
@@ -574,9 +591,11 @@ class Kernel_Cosine():
 
     def encode(self, A):
         """ Encode the data using the Cosine Kernels
+
         Args:
             A (np.array)
                 Data to be encoded
+
         Returns:
             M (np.array)
                 Encoded data

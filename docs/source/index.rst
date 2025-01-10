@@ -13,7 +13,6 @@ Documentation
    installation.rst
    reference.rst
 
-
 Indices and tables
 ------------------
 * :ref:`genindex`

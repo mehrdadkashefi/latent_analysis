@@ -21,11 +21,7 @@ class VarDecompose():
     The components are defined by a set of indicator variables.
     The hidden data (Y) should be in the shape of (num_conditions, num_timepoints, num_hidden_variables)
     The indicator variables should be in the shape of (num_conditions, 1), similar conditions will have the same values
-    Example:
-        Indicators = {'H': home_idx, 'T': target_idx, 'H:T': np.hstack((home_idx, target_idx))}
-        VarDec = ST.VarDecompose(Indicators, ortho_ineraction=True, verbose=1)
-        tss, fss =  VarDec.fit(Y) 
-        VarDec.plot(width=4, height=3, save_dir=current_script_path)
+    
     Args:
         Indicators (dict)
             A dictionary of indicator variables 
@@ -55,9 +51,11 @@ class VarDecompose():
 
     def fit(self, Y):
         """ Fit the model to the data
+
         Args:
             Y (np.array)
                 The hidden data (num_conditions, num_timepoints, num_hidden_variables)
+                
         Returns:
             tss (np.array)
                 Total variance of hidden variables
@@ -88,7 +86,8 @@ class VarDecompose():
     
     def plot(self, **kwargs):
         """ Plot the results
-        Kwargs:
+
+        Args:
             width (int)
                 Width of the figure, default is 15
             height (int)
@@ -170,9 +169,11 @@ class TimePointClassifier():
     An anlysis tool for classification of experimental conditions from continuous variables like position, velocity, average FR, etc.
     The continuous data (X) should be in the shape of (num_conditions, num_timepoints, num_variables)
     The associated class value (y) (num_conditions, )
+
     Example:
         TClassifier = ST.TimepointClassifier()
         acc, acc_chance =  TClassifier.fit(X, y) 
+
     Args:
         num_fold (int)
             Number of folds for cross-validation, default is 5
@@ -188,6 +189,7 @@ class TimePointClassifier():
   
     def fit(self, X, y):
         """ Run the classification models on every timepoint
+
         Args:
             X (np.array)
                 The continuous data (num_conditions, num_timepoints, num_variables)
@@ -252,6 +254,7 @@ class TimePointClassifier():
 # Runs a family of models on every timepoint
 class Model():
     """ RUN RMD-like models on each time point
+
     Args:
         name (str)
             Name of the model
@@ -275,6 +278,7 @@ class Model():
 
     def fit(self, Y, method, **kwargs):
         """ Fit the model to the data on each timepoint
+
         Args:
             Y (np.array)
                 The hidden data (num_conditions, num_timepoints, num_hidden_variables)
