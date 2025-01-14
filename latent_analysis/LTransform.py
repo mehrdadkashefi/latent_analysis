@@ -360,6 +360,8 @@ class OrthogonalPCA():
     """ Class for fitting and transforming data with Orthogonal PCs for planning and execution
 
     Args:
+        method (str) 
+            method to use for optimization (maniopt or scipy_minimize), default maniopt
         n_components (int)
             number of latent dimensions, default 5
         soft_norm_value (float)
@@ -368,6 +370,7 @@ class OrthogonalPCA():
             verbosity level, default 1
     """
     def __init__(self, **kwargs):
+        self.method = kwargs.get('method', 'maniopt')
         self.n_components = kwargs.get('n_components', 20)
         self.soft_norm_value = kwargs.get('soft_norm_value', 5)
         self.verbose = kwargs.get('verbose', 1)
@@ -408,47 +411,78 @@ class OrthogonalPCA():
         _, S_p, _ = np.linalg.svd(C_p)
         S_e = np.sum(S_e)
         S_p = np.sum(S_p)
-
-        # Run the optimization for double PCAs
-        num_dim = self.n_components
-        # Initialize the weights with PCA on segments of data
-        transform = Transform(num_latent=data_prep.shape[-1])
-        transform.fit(data_exe, method='PCA')
-        W_e = transform.components_[:,:num_dim]
-        #W_e = np.random.randn(num_units, num_dim)
-
-
-        transform = Transform(num_latent=data_prep.shape[-1])
-        transform.fit(data_prep, method='PCA')
-        W_p = transform.components_[:,:num_dim]
-        #W_p = np.random.randn(num_units, num_dim)
-
-        def  mycost(x):
-            W_p = x[:int(len(x)/2)].reshape(num_units, num_dim) 
-            W_e = x[int(len(x)/2):].reshape(num_units, num_dim)
-            f = 0.5*((np.trace(W_p.T@C_p@W_p)/S_p ) + (np.trace(W_e.T@C_e@W_e)/S_e) )
-            return -f
-
-        x0 = np.concatenate((W_p.reshape(-1,), W_e.reshape(-1,)))
+        # Optimization
+        if self.method == 'scipy_minimize':
+            # Run the optimization for double PCAs
+            num_dim = self.n_components
+            # Initialize the weights with PCA on segments of data
+            transform = Transform(num_latent=data_prep.shape[-1])
+            transform.fit(data_exe, method='PCA')
+            W_e = transform.components_[:,:num_dim]
+            #W_e = np.random.randn(num_units, num_dim)
 
 
-        con1 = lambda x: ((x[:int(len(x)/2)].reshape(num_units, num_dim)).T@ x[int(len(x)/2):].reshape(num_units, num_dim)).reshape(-1,)
-        nlc1 = NonlinearConstraint(con1, np.zeros((num_dim,num_dim)).reshape(-1,) ,np.zeros((num_dim,num_dim)).reshape(-1,))
+            transform = Transform(num_latent=data_prep.shape[-1])
+            transform.fit(data_prep, method='PCA')
+            W_p = transform.components_[:,:num_dim]
+            #W_p = np.random.randn(num_units, num_dim)
 
-        con2 = lambda x: ((x[:int(len(x)/2)].reshape(num_units, num_dim)).T@ (x[:int(len(x)/2)].reshape(num_units, num_dim))).reshape(-1,)
-        nlc2 = NonlinearConstraint(con2, np.eye((num_dim)).reshape(-1,) ,np.eye((num_dim)).reshape(-1,))
+            def  mycost(x):
+                W_p = x[:int(len(x)/2)].reshape(num_units, num_dim) 
+                W_e = x[int(len(x)/2):].reshape(num_units, num_dim)
+                f = 0.5*((np.trace(W_p.T@C_p@W_p)/S_p ) + (np.trace(W_e.T@C_e@W_e)/S_e) )
+                return -f
 
-        con3 = lambda x: ((x[int(len(x)/2):].reshape(num_units, num_dim)).T@ (x[int(len(x)/2):].reshape(num_units, num_dim))).reshape(-1,)
-        nlc3 = NonlinearConstraint(con3, np.eye((num_dim)).reshape(-1,) ,np.eye((num_dim)).reshape(-1,))
+            x0 = np.concatenate((W_p.reshape(-1,), W_e.reshape(-1,)))
 
 
-        res = minimize(mycost, x0,constraints=(nlc1, nlc2, nlc3), method='trust-constr',
-                    options={'disp': True, 'maxiter':500, 'verbose':self.verbose})
-        
-        # Get the final weights
-        x_opt = res.x
-        W_p = x_opt[:int(len(x_opt)/2)].reshape(num_units, num_dim) 
-        W_e = x_opt[int(len(x_opt)/2):].reshape(num_units, num_dim)
+            con1 = lambda x: ((x[:int(len(x)/2)].reshape(num_units, num_dim)).T@ x[int(len(x)/2):].reshape(num_units, num_dim)).reshape(-1,)
+            nlc1 = NonlinearConstraint(con1, np.zeros((num_dim,num_dim)).reshape(-1,) ,np.zeros((num_dim,num_dim)).reshape(-1,))
+
+            con2 = lambda x: ((x[:int(len(x)/2)].reshape(num_units, num_dim)).T@ (x[:int(len(x)/2)].reshape(num_units, num_dim))).reshape(-1,)
+            nlc2 = NonlinearConstraint(con2, np.eye((num_dim)).reshape(-1,) ,np.eye((num_dim)).reshape(-1,))
+
+            con3 = lambda x: ((x[int(len(x)/2):].reshape(num_units, num_dim)).T@ (x[int(len(x)/2):].reshape(num_units, num_dim))).reshape(-1,)
+            nlc3 = NonlinearConstraint(con3, np.eye((num_dim)).reshape(-1,) ,np.eye((num_dim)).reshape(-1,))
+
+
+            res = minimize(mycost, x0,constraints=(nlc1, nlc2, nlc3), method='trust-constr',
+                        options={'disp': True, 'maxiter':500, 'verbose':self.verbose})
+            
+            # Get the final weights
+            x_opt = res.x
+            W_p = x_opt[:int(len(x_opt)/2)].reshape(num_units, num_dim) 
+            W_e = x_opt[int(len(x_opt)/2):].reshape(num_units, num_dim)
+        elif self.method == 'maniopt':
+            import autograd.numpy as np_ag
+            import pymanopt
+            from pymanopt.manifolds import Stiefel
+            from pymanopt.optimizers import TrustRegions
+
+            def create_cost_and_derivates(manifold, C_p, C_e, S_p, S_e):
+                euclidean_gradient = euclidean_hessian = None
+                @pymanopt.function.autograd(manifold)   # possible backends("autograd", "jax", "numpy", "pytorch", "tensorflow")
+                def cost(w):
+                    W_p = w[:, :self.n_components]
+                    W_e = w[:, self.n_components:]
+                    return 0.5*((np_ag.trace(W_p.T@C_p@W_p)/S_p ) + (np_ag.trace(W_e.T@C_e@W_e)/S_e))
+                
+                return cost, euclidean_gradient, euclidean_hessian
+            
+            manifold = Stiefel(num_units, self.n_components * 2)
+            cost, euclidean_gradient, euclidean_hessian = create_cost_and_derivates(manifold, C_p, C_e, S_p, S_e)
+
+            problem = pymanopt.Problem(
+                manifold,
+                cost,
+                euclidean_gradient=euclidean_gradient,
+                euclidean_hessian=euclidean_hessian,
+            )
+            optimizer = TrustRegions(verbosity=self.verbose)
+            w_opt = optimizer.run(problem).point
+            W_p = w_opt[:, :self.n_components]
+            W_e = w_opt[:, self.n_components:]
+
         # Plot variance explained by each dimension
         print('Planning: ', np.trace(W_p.T@C_p@W_p)/S_p)
         print('Execution: ', np.trace(W_e.T@C_e@W_e)/S_e) 
