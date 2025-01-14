@@ -465,7 +465,7 @@ class OrthogonalPCA():
                 def cost(w):
                     W_p = w[:, :self.n_components]
                     W_e = w[:, self.n_components:]
-                    return 0.5*((np_ag.trace(W_p.T@C_p@W_p)/S_p ) + (np_ag.trace(W_e.T@C_e@W_e)/S_e))
+                    return -0.5*((np_ag.trace(W_p.T@C_p@W_p)/S_p ) + (np_ag.trace(W_e.T@C_e@W_e)/S_e))
                 
                 return cost, euclidean_gradient, euclidean_hessian
             
