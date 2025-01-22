@@ -206,7 +206,7 @@ class TimePointClassifier():
         
         if self.num_core ==1:
             acc = np.zeros((X.shape[1],2))
-            for t in range(X.shape[1]):
+            for t in tqdm(range(X.shape[1])):
                 acc[t, :] = self.par_function_classification(t)
         else:
             acc = np.zeros((X.shape[1],))
