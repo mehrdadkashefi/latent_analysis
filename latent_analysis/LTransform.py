@@ -502,3 +502,113 @@ class OrthogonalPCA():
         W_e = W_e @ transform.components_
 
         return W_p, W_e
+
+class OrthogonalPCA3(OrthogonalPCA):
+    """ Class for fitting and transforming data with Orthogonal PCs for planning and execution and a plan-execution subspace
+
+    Args:
+        n_components (int)
+            number of latent dimensions, default 5
+        soft_norm_value (float)
+            soft normalization value, default 5
+        verbose (int)
+            verbosity level, default 1
+    """
+
+    def fit(self, data_prep, data_exe):
+        """ Fit the Orthogonal PCA model to the data
+        
+        Args:
+            data_prep (np.array)
+                data for planning (Samples x Units)
+            data_exe (np.array)
+                data for execution (Samples x Units)
+        Returns:
+            W_p (np.array)
+                weights for planning
+            W_e (np.array)
+                weights for execution
+        """
+        # Preprocess (remove condition mean and soft scaling)
+        data_prep = self.pre_process(data_prep)
+        data_exe = self.pre_process(data_exe)
+        data_prepexe = np.concatenate((data_prep, data_exe), axis=1)
+        data_prepexe = self.pre_process(data_prepexe)
+
+        # Estimate the covariance matrices
+        N_p = np.vstack(data_prep).T
+        N_e = np.vstack(data_exe).T
+        N_pe = np.vstack(data_prepexe).T
+        num_units = N_p.shape[0]
+
+        # Estimate the Covariance
+        C_p = (1/(N_p.shape[1]-1))*((N_p - np.mean(N_p,axis=1, keepdims=True))@(N_p - np.mean(N_p,axis=1, keepdims=True)).T)
+        C_e = (1/(N_e.shape[1]-1))*((N_e - np.mean(N_e,axis=1, keepdims=True))@(N_e - np.mean(N_e,axis=1, keepdims=True)).T)
+        C_pe = (1/(N_pe.shape[1]-1))*((N_pe - np.mean(N_pe,axis=1, keepdims=True))@(N_pe - np.mean(N_pe,axis=1, keepdims=True)).T)
+
+        _, S_e, _ = np.linalg.svd(C_e)
+        _, S_p, _ = np.linalg.svd(C_p)
+        _, S_pe, _ = np.linalg.svd(C_pe)
+        S_e = np.sum(S_e)
+        S_p = np.sum(S_p)
+        S_pe = np.sum(S_pe)
+   
+        import autograd.numpy as np_ag
+        import pymanopt
+        from pymanopt.manifolds import Stiefel
+        from pymanopt.optimizers import TrustRegions
+
+        def create_cost_and_derivates(manifold, C_p, C_e,C_pe, S_p, S_e, S_pe):
+            euclidean_gradient = euclidean_hessian = None
+            @pymanopt.function.autograd(manifold)   # possible backends("autograd", "jax", "numpy", "pytorch", "tensorflow")
+            def cost(w):
+                W_p = w[:, :self.n_components]
+                W_e = w[:, self.n_components:2*self.n_components]
+                W_pe = w[:, 2*self.n_components:3*self.n_components]
+                return -(1/3)*((np_ag.trace(W_p.T@C_p@W_p)/S_p ) + (np_ag.trace(W_e.T@C_e@W_e)/S_e) + (np_ag.trace(W_pe.T@C_pe@W_pe)/S_pe))
+            
+            return cost, euclidean_gradient, euclidean_hessian
+        
+        manifold = Stiefel(num_units, self.n_components * 3)
+        cost, euclidean_gradient, euclidean_hessian = create_cost_and_derivates(manifold, C_p, C_e,C_pe, S_p, S_e, S_pe)
+
+        problem = pymanopt.Problem(
+            manifold,
+            cost,
+            euclidean_gradient=euclidean_gradient,
+            euclidean_hessian=euclidean_hessian,
+        )
+        optimizer = TrustRegions(verbosity=self.verbose)
+        w_opt = optimizer.run(problem).point
+        W_p = w_opt[:, :self.n_components]
+        W_e = w_opt[:, self.n_components:2*self.n_components]
+        W_pe = w_opt[:, 2*self.n_components:3*self.n_components]
+
+        # Plot variance explained by each dimension
+        print('Planning: ', np.trace(W_p.T@C_p@W_p)/S_p)
+        print('Execution: ', np.trace(W_e.T@C_e@W_e)/S_e) 
+        print('Plan-Execution: ', np.trace(W_pe.T@C_e@W_pe)/S_e) 
+        ## Check condtions
+        print('Normality of W_p:', np.isclose(W_p.T@W_p, np.eye(W_p.shape[1])).all())
+        print('Normality of W_e:', np.isclose(W_e.T@W_e, np.eye(W_e.shape[1])).all())
+        print('Normality of W_pe:', np.isclose(W_pe.T@W_pe, np.eye(W_pe.shape[1])).all())
+
+        print('Orthogonality of W_e and W_p:', np.isclose(W_e.T@W_p, np.zeros(W_e.shape[1])).all())
+        print('Orthogonality of W_e and W_pe:', np.isclose(W_e.T@W_pe, np.zeros(W_e.shape[1])).all())
+        print('Orthogonality of W_p and W_pe:', np.isclose(W_p.T@W_pe, np.zeros(W_p.shape[1])).all())
+
+        # Perform a final pca to sort the dimensions (This step does not change the amound of variance explained)
+        # Rotate Ws to maximize variance explained by first dimension
+        transform = Transform(num_latent=W_p.shape[-1])
+        transform.fit(data_prep @ W_p, method='PCA')
+        W_p = W_p @ transform.components_
+        # Execution
+        transform = Transform(num_latent=W_e.shape[-1])
+        transform.fit(data_exe @ W_e, method='PCA')
+        W_e = W_e @ transform.components_
+        # Plan-Execution
+        transform = Transform(num_latent=W_pe.shape[-1])
+        transform.fit(data_exe @ W_pe, method='PCA')
+        W_pe = W_pe @ transform.components_
+
+        return W_p, W_e, W_pe
