@@ -304,6 +304,8 @@ class Analysis_tools():
                 Plot the single trial, default is False
             return_padded (bool)
                 Whether to include padded data in return, default is False
+            causal (bool)
+                Whether to use causal convolution, default is True
 
         Returns:
             FR (np.array)
@@ -314,7 +316,7 @@ class Analysis_tools():
         self.t_pad = kwargs.get('t_pad', 0.5)   # How many seconds to pad the data from before and after the trial 
         plot = kwargs.get('plot', False)   # Plot the single trial
         return_padded = kwargs.get('return_padded', False)   # Whether to returned  
-
+        self.causal = kwargs.get('causal', True)   # Whether to use causal convolution
         # Get the stem first
         stem = self.get_stem(units, which_unit, t, plot=False, dt=self.dt, t_pad=self.t_pad, return_padded=True)
         # Smooth the stem with Gaussian window
@@ -327,7 +329,11 @@ class Analysis_tools():
         # Create Gaussian kernel
         window = gaussian(win_len, gauss_bin_std, sym=True)
         window /=  np.sum(window)
-        FR = convolve(stem, window, 'same') / self.dt
+        if self.causal:
+            FR = convolve(stem, window, 'full') / self.dt
+            FR = FR[:stem.shape[0]]
+        else:
+            FR = convolve(stem, window, 'same') / self.dt
 
         if return_padded == 0:
             num_pad = np.round(self.t_pad/ self.dt).astype('int')
