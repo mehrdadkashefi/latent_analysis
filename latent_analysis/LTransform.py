@@ -314,7 +314,7 @@ class dPCA():
 
         Args:
             X (np.array)
-                data to fit the model (Samples x Unit x Time)
+                data to fit the model (Condition x Time x Units)
         """
         # Apply preprocessing
         self.__pre_process(X)
@@ -334,10 +334,10 @@ class dPCA():
 
         Args:
             X (np.array)
-                data to transform (Samples x Units x Time)
+                data to transform (Condition x Time x Units)
         Returns:
             Z (np.array)
-                transformed data in the dPCA space (Time x Samples x num_lat
+                transformed data in the dPCA space (Condition x Time x Units
         """
         # Apply preprocessing
         self.__pre_process(X)  

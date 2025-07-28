@@ -51,7 +51,7 @@ def read_point2point(data_path, **kwargs):
             Data frame of the units (Spike times, KS label, etc.)
     """
     KSGood_only = kwargs.get('KSGood_only', False)   # Radius of the target
-    KSVersion = kwargs.get('KSVersion', 4)   # Which version of Kilosort to use
+    sort_folder_name = kwargs.get('sort_folder_name', 'units_kilosort4')   # Which version of Kilosort to use
 
     trial_info = pd.read_csv(os.path.join(data_path, "trial_info.csv"))
     # rename last event
@@ -70,10 +70,7 @@ def read_point2point(data_path, **kwargs):
         ('hand_spd', 'xy'):D[:, 4]
         })
     
-    if KSVersion == 4:
-        units = pd.read_pickle(os.path.join(data_path,  "units_ks40.pkl"))
-    elif KSVersion == 2:
-        units = pd.read_pickle(os.path.join(data_path,  "units_ks20.pkl"))
+    units = pd.read_pickle(os.path.join(data_path,  sort_folder_name + ".pkl"))
     if KSGood_only:
         units = units.loc[units.KSLabel == 'good', :]
 
@@ -148,7 +145,9 @@ def read_nhp_sequence(data_path, **kwargs):
     ('hand_pos', 'y'):temp[:,1],
     ('hand_vel', 'x'):temp[:,2],
     ('hand_vel', 'y'):temp[:,3], 
-    ('hand_spd', 'xy'):temp[:, 4]
+    ('hand_spd', 'xy'):temp[:, 4],
+    ('joint_pos', 'l1'):temp[:, 5],
+    ('joint_pos', 'l2'):temp[:, 6],
     })
     # rename last event
     if 'last_event' in trial_info.keys():
