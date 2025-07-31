@@ -612,3 +612,90 @@ class Kernel_Cosine():
             print('Rank of M: ', np.linalg.matrix_rank(M))
 
         return M
+
+def get_condition_mean(D, indicator):
+    """Get the mean of the conditions
+
+    Args:
+        D (np.array)
+            Data matrix
+        indicator (np.array)
+            Indicator for the conditions, 
+    
+    """
+    # Define grouping (e.g., grouping pairs of rows/columns)
+    M = len(np.unique(indicator))  # New size of reduced matrix
+    N = D.shape[0]  # Original size
+    # Create aggregation matrix A (M x N)
+    A = np.zeros((M, N))
+    for i in range(M):
+        A[i, (indicator == i)] = 1 / sum(indicator == i)
+    
+    # return the mean of the conditions as spicies in the indicator
+    return np.tensordot(A, D, axes=([1], [0]))
+
+def get_indicator_matrix(data):
+    """Get the indicator matrix for the data
+
+    Args:
+        data (np.array)
+            One dimensional data contianing the conditions
+
+    Returns:
+        indicator_matrix (np.array)
+            Indicator matrix
+    
+    """
+    data = data.reshape(-1)
+    num_sample = len(data)
+
+    value, value_inx, value_inv = np.unique(data, return_index=True, return_inverse=True)
+    num_cond = len(value) 
+
+    indicator_matrix = np.zeros((num_sample, num_cond))
+    for i in range(num_cond):
+        indicator_matrix[value_inv == i, i] = 1
+
+    return indicator_matrix
+
+
+def dist_to_G(dist):
+    """Transforms a squared Euclidean matrix into a second moment matrix
+    Args:
+        dist (ndarray): 2d array 
+    """
+    n = dist.shape[0]  # Number of conditions
+    H = np.eye(n) - np.ones((n, n)) / n  # Centering matrix
+    D_squared = dist ** 2  # Square the dissimilarities
+    G = -0.5 * H @ D_squared @ H  # Double-centering
+    return G
+
+def get_G(data, normalize=False):
+    """Get the second moment matrix from the data
+    Args:
+        data (np.array): 2D array of shape (K, N) where K is the number of conditions and N is the number of samples
+        normalize (bool): If True, normalize the second moment matrix by its trace
+    Returns:
+        np.array: Second moment matrix of shape (K, K)
+    """
+    K = data.shape[0]
+    N = data.shape[1]
+    H = np.eye(K) - np.ones((K, K)) / K
+    G = (1/N) * (H@data@data.T@H.T)
+    if normalize:
+        G = G / np.trace(G)
+    return G
+
+def cosine_similarity(D1, D2):
+    """Calculate the cosine similarity between two matrices.
+    Args:
+        D1 (np.array): First matrix
+        D2 (np.array): Second matrix
+    Returns:
+        float: Cosine similarity between the two matrices
+    """
+    r1 = D1.flatten()
+    r2 = D2.flatten()
+    r1 = (r1-np.min(r1)) - (np.max(r1) - np.min(r1))
+    r2 = (r2-np.min(r2)) - (np.max(r2) - np.min(r2))
+    return np.dot(r1, r2) / np.sqrt(np.dot(r1, r1) * np.dot(r2, r2))
