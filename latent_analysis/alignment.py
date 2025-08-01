@@ -186,6 +186,7 @@ class Procrustes():
     def transform(self, Y):
         """
         Transform the Y matrix using the transformation matrix.
+
         Args:
             Y (np.array)
                 data to transform (Samples x Units)
@@ -199,6 +200,7 @@ class Procrustes():
     def score(self, X, Y):
         """
         Compute the score of the transformation.
+        
         Args:
             X (np.array)
                 data to transform (Samples x Units)
@@ -215,6 +217,7 @@ class Procrustes():
 def get_dissimilarity_cond_avr(X, X_conds, Y, Y_conds, n_folds = 2, n_times = 1, method = 'CCA_svd'):
     """
     Compute the dissimilarity between two datasets by first averaging across trial, and using cross-validation.
+    
     Args:
         X (np.array)
             First dataset (n_trials, n_time, n_chan)
