@@ -7,7 +7,7 @@ import pandas as pd
 import time
 from tqdm import tqdm
 from sklearn.model_selection import KFold
-from latent_analysis.latent_analysis.utils import get_condition_mean
+from latent_analysis.utils import get_condition_mean
 
 class CCA_svd():
     """Canonical Correlation Analysis using Singular Value Decomposition (SVD)"""

@@ -12,7 +12,6 @@ from scipy.signal import savgol_filter
 from scipy.optimize import nnls
 from sklearn.model_selection import KFold
 from tqdm import tqdm
-from PcmPy.regression import RidgeDiag
 import mat73 as mat73
 
 class VarDecompose():
@@ -342,6 +341,7 @@ class Model():
 
         # Fit with PCM
         if self.method == 'PCM':
+            from PcmPy.regression import RidgeDiag
             for T in tqdm(range(num_time_sample)):
                 YY = np.squeeze(Y[:, T, :])
                 # k_fold cv

@@ -1,3 +1,7 @@
+"""
+Collection of tools visualization
+@Author: Mehrdad Kashefi
+"""
 import plotly.express as px
 import matplotlib.pyplot as plt
 
