@@ -7,15 +7,27 @@ import pandas as pd
 import time
 from tqdm import tqdm
 from sklearn.model_selection import KFold
-from latent_analysis.utils import get_condition_mean
+from latent_analysis.utils import get_condition_mean, collapse_cond_time
 
 class CCA_svd():
-    """Canonical Correlation Analysis using Singular Value Decomposition (SVD)"""
+    """ Canonical Correlation Analysis using Singular Value Decomposition (SVD)
 
+    Args:
+        n_components (int)
+            number of CC components, default 2
+    """
     def __init__(self, n_components=2):
         self.n_components = n_components
 
     def fit(self, X, Y):
+        """ Fit the CCA model to the data
+
+        Args:
+            X (np.array)
+                data to fit the model (Samples x Units)
+            Y (np.array)
+                data to fit the model (Samples x Units)
+        """
         self.X = X
         self.Y = Y
 
@@ -32,15 +44,29 @@ class CCA_svd():
         self.Wy = np.linalg.pinv(R_y) @ Vt.T
 
     def transform(self, X, Y):
+        """ Transforms new data in fitted CCA space
+
+        Args:
+            X (np.array)
+                data to fit the model (Samples x Units)
+            Y (np.array)
+                data to fit the model (Samples x Units)
+        """
         X_c = X @ self.Wx[:, :self.n_components]
         Y_c = Y @ self.Wy[:, :self.n_components]
         return X_c, Y_c
         
     def score(self, X, Y):
-        # project X into Y and get R2
-        X_c = X @ self.Wx[:, :self.n_components]
-        Y_c = Y @ self.Wy[:, :self.n_components]
+        """ Transforms new data in fitted CCA space and computes the R2 score
 
+        Args:
+            X (np.array)
+                data to fit the model (Samples x Units)
+            Y (np.array)
+                data to fit the model (Samples x Units)
+        """
+        X_c, Y_c = self.transform(X, Y)
+        # Compute the R2 score
         sse = np.sum((X_c - Y_c) ** 2)
         sst = np.sum((X_c - np.mean(X_c, axis=0)) ** 2)
         return 1 - sse / sst
@@ -53,44 +79,42 @@ class Procrustes():
     conform them to the points in matrix X, using the sum of squared errors
     as the goodness of fit criterion.
 
-        d, Z, [tform] = procrustes(X, Y)
+    d, Z, [tform] = procrustes(X, Y)
 
-    Inputs:
-    ------------
-    X, Y    
-        matrices of target and input coordinates. they must have equal
-        numbers of  points (rows), but Y may have fewer dimensions
-        (columns) than X.
-
-    scaling 
-        if False, the scaling component of the transformation is forced
-        to 1
-
-    reflection
-        if 'best' (default), the transformation solution may or may not
-        include a reflection component, depending on which fits the data
-        best. setting reflection to True or False forces a solution with
-        reflection or no reflection respectively.
-
-    Outputs
-    ------------
-    d       
-        the residual sum of squared errors, normalized according to a
-        measure of the scale of X, ((X - X.mean(0))**2).sum()
-
-    Z
-        the matrix of transformed Y-values
-
-    tform   
-        a dict specifying the rotation, translation and scaling that
-        maps X --> Y
-
+    Args:
+        scaling (bool, default True)
+            Controls whether the solution includes a scaling component.
+        reflection (str, default 'best')
+            if 'best' (default), the transformation solution may or may not
+            include a reflection component, depending on which fits the data
+            best. setting reflection to True or False forces a solution with
+            reflection or no reflection respectively.
     """
     def __init__(self, scaling=True, reflection='best'):
         self.scaling = scaling
         self.reflection = reflection
     
     def fit(self, X, Y):
+        """ Fit the Procrustes model to the data
+
+        Args:
+            X (np.array)
+                data to fit the model (Samples x Units)
+            Y (np.array)
+                data to fit the model (Samples x Units)
+        Returns:
+            d (float)
+                the residual sum of squared errors, normalized according to a
+                measure of the scale of X, ((X - X.mean(0))**2).sum()
+            Z (np.array)
+                the matrix of transformed Y-values
+            tform (dict)
+                a dict specifying the rotation, translation and scaling that
+                maps X --> Y
+        """
+        self.X = X
+        self.Y = Y
+
         n_sample, n_chan_X = X.shape
         _ , n_chan_Y = Y.shape
 
@@ -162,6 +186,12 @@ class Procrustes():
     def transform(self, Y):
         """
         Transform the Y matrix using the transformation matrix.
+        Args:
+            Y (np.array)
+                data to transform (Samples x Units)
+        Returns:
+            Z (np.array)
+                the matrix of transformed Y-values
         """
         Z = np.dot(Y, self.tform['rotation']) * self.tform['scale'] + self.tform['translation']
         return Z
@@ -169,40 +199,43 @@ class Procrustes():
     def score(self, X, Y):
         """
         Compute the score of the transformation.
+        Args:
+            X (np.array)
+                data to transform (Samples x Units)
+            Y (np.array)
+                data to transform (Samples x Units)
+        Returns:
+            score (float)
+                the R2 score of aligned data.
         """
         Z = self.transform(Y) 
         return 1 - np.sum((X - Z ) ** 2) / ((X - X.mean(0))**2).sum()
-
-
-
-def collapse_cond_time(data):
-    """
-    Collapse the condition and time dimensions of the data.
-    Args:
-        data: numpy array of shape (n_cond, n_time, n_chan)
-    Returns:
-        numpy array of shape (n_time * n_cond, n_chan)
-    """
-    n_cond, n_time, n_chan = data.shape
-    return data.transpose(2, 0, 1).reshape(n_chan, n_time * n_cond).T
 
 
 def get_dissimilarity_cond_avr(X, X_conds, Y, Y_conds, n_folds = 2, n_times = 1, method = 'CCA_svd'):
     """
     Compute the dissimilarity between two datasets by first averaging across trial, and using cross-validation.
     Args:
-        X: numpy array of shape (n_trials, n_time, n_chan)
-        X_conds: An array of length n_trials containing the condition id for each trial in X
-        Y: numpy array of shape (n_trials, n_time, n_chan)
-        Y_conds: An array of length n_trials containing the condition id for each trial in Y
-        n_folds: number of folds for cross-validation
-        n_times: number of times to repeat the analysis
-        method: method to use for dissimilarity analysis ('CCA_svd', 'CCA_sklearn', 'Procrustes')
+        X (np.array)
+            First dataset (n_trials, n_time, n_chan)
+        X_conds (np.array)
+            An array of length n_trials containing the condition id for each trial in X
+        Y (np.array)
+            Second dataset (n_trials, n_time, n_chan)
+        Y_conds (np.array)
+            An array of length n_trials containing the condition id for each trial in Y
+        n_folds (int)
+            Number of folds for cross-validation
+        n_times (int)
+            Number of times to repeat the cross-validation
+        method (str)
+            Method to use for dissimilarity analysis ('CCA_svd', 'CCA_sklearn', 'Procrustes'). Default is 'CCA_svd'.
     Returns:
-        df_score: pandas DataFrame containing the scores for each fold and time
-        df: pandas DataFrame containing extra information for CCA methods
+        df_score (pd.DataFrame)
+            DataFrame containing the scores for each fold and time
+        df (pd.DataFrame)
+            DataFrame containing extra information for CCA methods
     """
-
     rows = []   
     rows_score = []
 

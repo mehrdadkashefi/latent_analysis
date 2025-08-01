@@ -699,3 +699,15 @@ def cosine_similarity(D1, D2):
     r1 = (r1-np.min(r1)) - (np.max(r1) - np.min(r1))
     r2 = (r2-np.min(r2)) - (np.max(r2) - np.min(r2))
     return np.dot(r1, r2) / np.sqrt(np.dot(r1, r1) * np.dot(r2, r2))
+
+
+def collapse_cond_time(data):
+    """
+    Collapse the condition and time dimensions of the data.
+    Args:
+        data: numpy array of shape (n_cond, n_time, n_chan)
+    Returns:
+        numpy array of shape (n_time * n_cond, n_chan)
+    """
+    n_cond, n_time, n_chan = data.shape
+    return data.transpose(2, 0, 1).reshape(n_chan, n_time * n_cond).T

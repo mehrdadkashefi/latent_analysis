@@ -1,6 +1,6 @@
 .. _alignment:
 
-transform module
+alignment module
 =================================
 
 .. automodule:: alignment
