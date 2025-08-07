@@ -150,9 +150,9 @@ class jPCA():
         n_range = np.max(np.vstack(X), axis=0, keepdims=True) - np.min(np.vstack(X), axis=0, keepdims=True)
         rate_scaled = (X - n_mean)/(n_range+5)
 
-        transform = Transform(num_latent=self.num_comp_pc)
-        transform.fit(rate_scaled, method='PCA')
-        rate_red = transform.transform(rate_scaled, ensure_orthogonality=True)
+        transform = PCA(num_latent=self.num_comp_pc)
+        transform.fit(rate_scaled)
+        rate_red = transform.transform(rate_scaled)
         self.variance_explained_pca = np.round(sum(transform.variance_explained[0:self.num_comp_pc]), 3)
         print('Var explained by initial PCA {}'.format(np.round(sum(transform.variance_explained[0:self.num_comp_pc]), 3)))
 
@@ -200,18 +200,18 @@ class jPCA():
         rate_scaled = (X - n_mean)/(n_range+5)
 
         # Initial PCA
-        transform = Transform(num_latent=self.num_comp_pc)
-        transform.fit(rate_scaled, method='PCA')
-        rate_red = transform.transform(rate_scaled, ensure_orthogonality=True)
+        transform = PCA(num_latent=self.num_comp_pc)
+        transform.fit(rate_scaled)
+        rate_red = transform.transform(rate_scaled)
         rate_jpca = np.matmul(rate_red, self.jpca_w)
         self.variance_explained_jpcs = np.round(np.sum(np.var(rate_jpca, axis=0))/np.sum(np.var(rate_red, axis=0)), 3)
         print('Var explained by 2 jPCs {}'.format(np.round(np.sum(np.var(rate_jpca, axis=0))/np.sum(np.var(rate_red, axis=0)), 3)))
 
         ## Rotate axis so that planning is aligned with X axis
         if self.aling_x_axis:
-            transform = Transform(num_latent=rate_jpca.shape[-1])
-            transform.fit(rate_jpca[:, 0, :], method='PCA')
-            rate_jpca = transform.transform(rate_jpca, ensure_orthogonality=True)
+            transform = PCA(num_latent=rate_jpca.shape[-1])
+            transform.fit(rate_jpca[:, 0, :])
+            rate_jpca = transform.transform(rate_jpca)
             # Make sure rotations are always CCW
             if np.cross(np.append(transform.components_[:,0], 0), np.append(transform.components_[:,1], 0))[-1]:
                 rate_jpca = np.matmul(rate_jpca, np.array([[1,  0],[0 ,-1]]))
@@ -404,14 +404,14 @@ class OrthogonalPCA():
             # Run the optimization for double PCAs
             num_dim = self.n_components
             # Initialize the weights with PCA on segments of data
-            transform = Transform(num_latent=data_prep.shape[-1])
-            transform.fit(data_exe, method='PCA')
+            transform = PCA(num_latent=data_prep.shape[-1])
+            transform.fit(data_exe)
             W_e = transform.components_[:,:num_dim]
             #W_e = np.random.randn(num_units, num_dim)
 
 
-            transform = Transform(num_latent=data_prep.shape[-1])
-            transform.fit(data_prep, method='PCA')
+            transform = PCA(num_latent=data_prep.shape[-1])
+            transform.fit(data_prep)
             W_p = transform.components_[:,:num_dim]
             #W_p = np.random.randn(num_units, num_dim)
 
@@ -481,12 +481,12 @@ class OrthogonalPCA():
 
         # Perform a final pca to sort the dimensions (This step does not change the amound of variance explained)
         # Rotate Ws to maximize variance explained by first dimension
-        transform = Transform(num_latent=W_p.shape[-1])
-        transform.fit(data_prep @ W_p, method='PCA')
+        transform = PCA(num_latent=W_p.shape[-1])
+        transform.fit(data_prep @ W_p)
         W_p = W_p @ transform.components_
         # Execution
-        transform = Transform(num_latent=W_e.shape[-1])
-        transform.fit(data_exe @ W_e, method='PCA')
+        transform = PCA(num_latent=W_e.shape[-1])
+        transform.fit(data_exe @ W_e)
         W_e = W_e @ transform.components_
 
         return W_p, W_e
@@ -587,16 +587,16 @@ class OrthogonalPCA3(OrthogonalPCA):
 
         # Perform a final pca to sort the dimensions (This step does not change the amound of variance explained)
         # Rotate Ws to maximize variance explained by first dimension
-        transform = Transform(num_latent=W_p.shape[-1])
-        transform.fit(data_prep @ W_p, method='PCA')
+        transform = PCA(num_latent=W_p.shape[-1])
+        transform.fit(data_prep @ W_p)
         W_p = W_p @ transform.components_
         # Execution
-        transform = Transform(num_latent=W_e.shape[-1])
-        transform.fit(data_exe @ W_e, method='PCA')
+        transform = PCA(num_latent=W_e.shape[-1])
+        transform.fit(data_exe @ W_e)
         W_e = W_e @ transform.components_
         # Plan-Execution
-        transform = Transform(num_latent=W_pe.shape[-1])
-        transform.fit(data_exe @ W_pe, method='PCA')
+        transform = PCA(num_latent=W_pe.shape[-1])
+        transform.fit(data_exe @ W_pe)
         W_pe = W_pe @ transform.components_
 
         return W_p, W_e, W_pe
