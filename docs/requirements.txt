@@ -18,3 +18,4 @@ mat73
 dPCA
 numexpr
 numba
+plotly
