@@ -13,6 +13,131 @@ from scipy.optimize import nnls
 from sklearn.model_selection import KFold
 from tqdm import tqdm
 import mat73 as mat73
+import pandas as pd
+from scipy.spatial.distance import pdist, squareform
+from latent_analysis import utils, plot
+
+class GDecompose():
+    """ 
+    Analysis tool for decomposing structure of data G matrix into a series of model G matrices built from features.
+
+    """
+    def __init__(self):
+        self.models_name = []
+        self.models_G = []
+        self.models_RDM = []
+
+    def add_model_from_features(self, features, feature_names, normalize=True):
+        """ Add a feature and calculate its G matrix
+        Args:
+            features (np.array)
+                The feature matrix (num_conditions, num_features)
+            feature_names (str)
+                Name of the feature
+            normalize (bool)
+                If True, the G will be normalized by its trace
+        """
+        G = utils.get_G(features, normalize=normalize)
+        self.models_G.append(G)
+        self.models_name.append(feature_names)
+        # Get RDM for G matrix
+        RDM = squareform(pdist(features))
+        self.models_RDM.append(RDM)
+
+    def plot_models(self, what, w=300, h=300, colormap = 'inferno'):
+        """ Plot the model Gs or RDMs
+
+        Args:
+            what (str)
+                'G' or 'RDM'
+            w (int)
+                Width of the figure, default is 300
+            h (int)
+                Height of the figure, default is 300
+            colormap (str)
+                Colormap for the figure, default is 'inferno'
+        """
+        for model_name, model_Gm, model_RDM in zip(self.models_name, self.models_G, self.models_RDM):
+            if what == 'G':
+                print(model_name)
+                plot.plot_RDM(model_Gm, w=w, h=h, colormap=colormap)
+            elif what == 'RDM':
+                print(model_name)   
+                plot.plot_RDM(model_RDM, w=w, h=h, colormap=colormap)
+
+    def fit(self, data, normalize_G_emp=True):
+        """ Fit the model Gs to the data G on every timepoint 
+
+        Args:
+            data (np.array)
+                The hidden data (num_conditions, num_hidden_variables) or (num_conditions, num_timepoints, num_hidden_variables)
+            normalize_G_emp (bool)
+                If True, the empirical G will be normalized by its trace
+
+                
+        Returns:
+            df_beta (pd.DataFrame)
+                A dataframe containing the beta values for each model at each timepoint
+            df_fit (pd.DataFrame)
+                A dataframe containing the fss and tss values for each timepoint
+        """
+        if isinstance(data, list):
+            for i in range(len(data)):
+                if data[i].ndim == 2:
+                    data[i] = data[i][:, np.newaxis, :]
+            n_timepoints = data[0].shape[1]
+        else:
+            if data.ndim == 2:
+                data = data[:, np.newaxis, :]
+            n_timepoints = data.shape[1]
+
+
+        X = np.zeros((self.models_G[0].shape[0]**2, len(self.models_G)))
+        fss = np.zeros((len(self.models_G), ))
+        for i, g in enumerate(self.models_G):
+            X[:, i] = g.flatten()
+
+        self.rows_beta = []
+        self.rows_fit = []
+        for t in range(n_timepoints):
+            # If a list of data is given, calculate cross validate G matrix
+            if isinstance(data, list):
+                K = data[0][:, t, :].shape[0]
+                N = data[0][:, t, :].shape[1]
+                H = np.eye(K) - np.ones((K, K)) / K
+                G = (1/N) * (H@data[0][:, t, :]@data[1][:, t, :].T@H.T)
+                if normalize_G_emp:
+                    G = G / np.trace(G)
+                G_emp = G
+
+                pass
+            else:
+                G_emp = utils.get_G(data[:, t, :], normalize=normalize_G_emp)
+
+            # Fit models
+            tss = np.trace(G_emp)
+            beta = nnls(X, G_emp.flatten())[0]
+
+            for i, name in enumerate(self.models_name):
+                self.rows_beta.append({
+                                        'feature': name,
+                                        'beta': beta[i],  
+                                        'time':t
+                                    })
+            G_emp_pred = np.zeros_like(G_emp)
+            for f, gm in enumerate(self.models_G):
+                G_emp_pred += gm*beta[f]
+                fss[f] = np.trace(gm*beta[f])
+
+            sum(fss)
+            self.rows_fit.append({
+                                    'fss': np.sum(fss),
+                                    'tss': tss,  
+                                    'r2': np.sum(fss)/tss,
+                                    'time':t
+                                    })
+
+        return pd.DataFrame(self.rows_beta), pd.DataFrame(self.rows_fit)
 
 class VarDecompose():
     """ 
