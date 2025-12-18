@@ -471,24 +471,34 @@ class OrthogonalPCA():
             W_p = w_opt[:, :self.n_components]
             W_e = w_opt[:, self.n_components:]
 
+        # Get variance explained per dimension
+        self.var_exp = {}
+        self.var_exp_fit = {}
+        self.constraints_satisfied = {}
         # Plot variance explained by each dimension
         print('Planning: ', np.trace(W_p.T@C_p@W_p)/S_p)
         print('Execution: ', np.trace(W_e.T@C_e@W_e)/S_e) 
+        self.var_exp_fit['plan'] = np.trace(W_p.T@C_p@W_p)/S_p
+        self.var_exp_fit['exe'] = np.trace(W_e.T@C_e@W_e)/S_e
         ## Check condtions
         print('Normality of W_p:', np.isclose(W_p.T@W_p, np.eye(W_p.shape[1])).all())
         print('Normality of W_e:', np.isclose(W_e.T@W_e, np.eye(W_e.shape[1])).all())
         print('Orthogonality of W_e and W_p:', np.isclose(W_e.T@W_p, np.zeros(W_e.shape[1])).all())
+        self.constraints_satisfied['normality_plan'] = np.isclose(W_p.T@W_p, np.eye(W_p.shape[1])).all()
+        self.constraints_satisfied['normality_exe'] = np.isclose(W_e.T@W_e, np.eye(W_e.shape[1])).all()
+        self.constraints_satisfied['orthogonality'] = np.isclose(W_e.T@W_p, np.zeros(W_e.shape[1])).all()
 
         # Perform a final pca to sort the dimensions (This step does not change the amound of variance explained)
         # Rotate Ws to maximize variance explained by first dimension
         transform = PCA(num_latent=W_p.shape[-1])
         transform.fit(data_prep @ W_p)
         W_p = W_p @ transform.components_
+        self.var_exp['plan'] = transform.variance_explained
         # Execution
         transform = PCA(num_latent=W_e.shape[-1])
         transform.fit(data_exe @ W_e)
         W_e = W_e @ transform.components_
-
+        self.var_exp['exe'] = transform.variance_explained
         return W_p, W_e
 
 class OrthogonalPCA3(OrthogonalPCA):
