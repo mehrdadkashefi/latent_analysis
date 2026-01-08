@@ -168,6 +168,7 @@ class jPCA():
             M =  self.skew_sym_regress(X, X_dot)
         else:
             M = np.linalg.lstsq(X, X_dot, rcond=None)[0]
+        self.M = M
         self.variance_explained_rot_fit = np.round(self.R2(X_dot, X@M), 3)
         print('R2 for linear fit: {}'.format(np.round(self.R2(X_dot, X@M), 3)))
         # Get eigenvalues and eigenvectors of the dynamical system
@@ -343,6 +344,109 @@ class dPCA():
             
 
         return Z
+
+class CVdPCA():
+    """ Class for fitting and transforming data with dPCA, using dPCA toolbox (individual trials are needed for crossvalidated estimation of covariance)
+    Example usage:
+        ddpca = CVdPCA(n_components=6, plot=True)
+        ddpca.fit(data_aligned, conds_idx)
+        Z = ddpca.transform(data_aligned, conds_idx)
+
+    Args:
+        n_components (int)
+            number of latent dimensions, default 5
+        soft_norm_value (float)
+            soft normalization value, default 5
+        plot (bool)
+            if True, plot the explained variance, default True
+    """
+    def __init__(self, n_components, **kwargs):
+        self.n_components = n_components
+        self.plot = kwargs.get('plot', True)
+
+    def pre_process(self, data_aligned, conds_idx):
+        """ Rearrange trial data equal number of trial per condition
+
+        Args:
+            data_aligned (np.array)
+                data to preprocess (condition x time x units)
+            conds_idx (np.array)
+                condition indices (condition, 1)
+        
+        Returns:
+            data_aligned_sample_centre (np.array)
+                trial-averaged preprocessed data (units x condition x time)
+            data_aligned_sampled (np.array)
+                preprocessed data with balanced conditions (trials x units x condition x time)
+        """
+
+        unique_cond, counts = np.unique(conds_idx, return_counts=True)
+        data_aligned_sampled = np.zeros((max(counts),len(counts)) + data_aligned.shape[1:])
+        # resample a few trials to make trial per condition to be equal
+        for c in unique_cond:
+            n_resample = max(counts) - counts[c]
+            resample_idx = np.random.choice(np.where(conds_idx == c)[0], size=n_resample, replace=False)
+            idx = np.concatenate([np.where(conds_idx == c)[0], resample_idx])
+
+            data_aligned_sampled[:, c, :, :] = data_aligned[idx, :, :]
+
+        data_aligned_sampled = data_aligned_sampled.transpose(0,3,1,2)
+
+        # trial-average data
+        data_aligned_sample_centre = np.mean(data_aligned_sampled,0)
+        # center data
+        data_aligned_sample_centre -= np.mean(data_aligned_sample_centre.reshape((data_aligned.shape[-1],-1)),1)[:,None,None]
+
+        return data_aligned_sample_centre , data_aligned_sampled
+
+    def fit(self, data_aligned, conds_idx):
+        """ Fit the dPCA model to the data
+
+        Args:
+            data_aligned (np.array)
+                data to fit (condition x time x units)
+            conds_idx (np.array)
+                condition indices (condition, 1)
+        
+        """
+
+        data_aligned_sample_centre , data_aligned_sampled = self.pre_process(data_aligned, conds_idx)
+
+        self.dpca = dpca.dPCA(labels='ct',regularizer='auto')
+        self.dpca.protect = ['t']
+        self.dpca.fit(data_aligned_sample_centre ,data_aligned_sampled)
+
+    def transform(self, data_aligned, conds_idx):
+        """ Transform data using the fitted dPCA model
+
+        Args:
+            data_aligned (np.array)
+                data to transform (condition x time x units)
+            
+            conds_idx (np.array)
+                condition indices (condition, 1)
+        
+        Returns:
+            Z (np.array)
+                transformed data (condition x time x components)
+        """
+        if self.dpca is None:
+            raise ValueError('dPCA model is not fitted yet. Please call fit() method first.')
+
+        data_aligned_sample_centre , data_aligned_sampled = self.pre_process(data_aligned, conds_idx)
+        Z = self.dpca.transform(np.mean(data_aligned_sampled, axis=0))
+        for key in Z.keys():
+            Z[key] = Z[key].transpose(1,2,0)
+
+        return Z
+
+    
+
+    def plot_explained_variance(self):
+        plt.figure()
+        sns.barplot(self.var_explained_df, x='pc', y='variance_explained', hue='factor', palette=sns.color_palette('muted', 3))
+        plt.ylabel('Ratio of explained variance')
+        plt.show()
 
 class OrthogonalPCA():
     """ Class for fitting and transforming data with Orthogonal PCs for planning and execution
