@@ -370,7 +370,7 @@ class TimePointClassifier():
         for train_index, test_index in kf.split(X):
             X_train, X_test = X[train_index], X[test_index]
             y_train, y_test = y[train_index], y[test_index]
-            clf = RidgeClassifierCV().fit(X_train, y_train)
+            clf = RidgeClassifierCV(alphas=(0.1, 10.0, 100.0,1000.0)).fit(X_train, y_train)
             score.append(clf.score(X_test, y_test))
         score = np.mean(score)
         return score

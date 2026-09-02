@@ -469,8 +469,7 @@ class OrthogonalPCA():
 
     def pre_process(self, X):
         units_mean = np.mean(X, axis=0, keepdims=True)
-        n_range = np.max(np.vstack(X), axis=0, keepdims=True) - np.min(np.vstack(X), axis=0, keepdims=True)
-        return (X - units_mean)/(n_range + self.soft_norm_value)
+        return (X - units_mean)/(self.units_range + self.soft_norm_value)
     
     def fit(self, data_prep, data_exe):
         """ Fit the Orthogonal PCA model to the data
@@ -487,6 +486,7 @@ class OrthogonalPCA():
                 weights for execution
         """
         # Preprocess (remove condition mean and soft scaling)
+        self.units_range = np.ptp(np.concatenate((data_prep, data_exe), axis=1), axis = (0,1), keepdims=True)
         data_prep = self.pre_process(data_prep)
         data_exe = self.pre_process(data_exe)
 
