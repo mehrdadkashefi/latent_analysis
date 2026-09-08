@@ -8,6 +8,7 @@ import time
 from tqdm import tqdm
 from sklearn.model_selection import KFold
 from latent_analysis.utils import get_condition_mean, collapse_cond_time
+from scipy.linalg import eigh
 
 class CCA_svd():
     """ Canonical Correlation Analysis using Singular Value Decomposition (SVD)
@@ -339,3 +340,138 @@ def get_dissimilarity_cond_avr(X, X_conds, Y, Y_conds, n_folds = 2, n_times = 1,
             df = pd.DataFrame(rows)
             df_score = pd.DataFrame(rows_score)
     return df_score, df 
+
+
+# Alignment index
+# helpers functions
+def _flat(X):
+    """(trials, time, units) -> (trials*time, units).
+    """
+    return X.reshape(-1, X.shape[-1])
+
+
+def top_pcs(X, k):
+    """Orthonormal basis (n_units, k) for the top-k PC subspace of X.
+
+    X is (n_samples, n_units) and is mean-centred internally, exactly like
+    sklearn's PCA.
+    """
+    X0 = X - X.mean(axis=0)
+    n, u = X0.shape
+    if u <= n:                                   # usual case: units << samples
+        S = X0.T @ X0                            # (u, u)
+        _, V = eigh(S, subset_by_index=(u - k, u - 1))
+    else:                                        # wide case: use the Gram trick
+        G = X0 @ X0.T                            # (n, n)
+        _, W = eigh(G, subset_by_index=(n - k, n - 1))
+        V = X0.T @ W
+        V /= np.linalg.norm(V, axis=0, keepdims=True)
+    return np.ascontiguousarray(V)
+
+
+# ----------------------------------------------------------------------
+# single alignment index
+# ----------------------------------------------------------------------
+def alignment_index(A, B, n_dim=10, pca=top_pcs):
+    """
+    Variance of A captured by B's top-n_dim PCs, relative to A's own.
+
+    Args:
+        A (np.array)
+            First dataset (n_trials, n_time, n_chan)
+        B (np.array)    
+        Second dataset (n_trials, n_time, n_chan)
+        n_dim (int)
+            Number of principal components to use
+        pca (function)
+            Function to compute the top-n_dim PCs of a dataset
+    Returns:
+        ai (float)
+            Alignment index between A and B
+    
+    """
+    Amat, Bmat = _flat(A), _flat(B)
+    nA, nB = Amat.shape[0], Bmat.shape[0]
+
+    # mean over the concatenation of A and B, without concatenating
+    mu = (Amat.sum(axis=0) + Bmat.sum(axis=0)) / (nA + nB)
+
+    UA = pca(Amat, n_dim)
+    UB = pca(Bmat, n_dim)
+
+    Ac = Amat - mu
+    PA = Ac @ UA                         
+    PB = Ac @ UB
+    # trace(U' C_A U) == ||Ac @ U||_F^2 / (nA - 1); the 1/(nA-1) cancels
+    return float((PB.ravel() @ PB.ravel()) / (PA.ravel() @ PA.ravel()))
+
+
+# ----------------------------------------------------------------------
+# cross-validated alignment index
+# ----------------------------------------------------------------------
+class _Half:
+    """Everything about one trial-half that does not depend on its partner."""
+
+    __slots__ = ("n", "mean", "S", "U")
+
+    def __init__(self, X, n_dim, pca):
+        M = _flat(X)
+        self.n = M.shape[0]
+        self.mean = M.mean(axis=0)
+        X0 = M - self.mean
+        self.S = X0.T @ X0
+        self.U = pca(M, n_dim)
+
+
+def _quad(h, d, U):
+    """trace(U' Xc' Xc U) where Xc = X - (joint mean) and d = joint mean - mean_X.
+
+    Xc'Xc = S_X + n_X d d'  (the cross terms vanish because X0 has zero
+    column means), so this stays exact while only touching (u, u) and (u, k).
+    """
+    v = d @ U
+    return np.sum(U * (h.S @ U)) + h.n * (v @ v)
+
+
+def _ai_pair(X, Y):
+    d = (Y.n / (X.n + Y.n)) * (Y.mean - X.mean)
+    return _quad(X, d, Y.U) / _quad(X, d, X.U)
+
+
+def alignment_index_crossval(A, B, n_dim=10, pca=top_pcs):
+    """
+    Cross-validated alignment index, splitting trials in half.
+    
+    Args:
+        A (np.array)
+            First dataset (n_trials, n_time, n_chan)
+        B (np.array)
+            Second dataset (n_trials, n_time, n_chan)
+        n_dim (int)
+            Number of principal components to use
+        pca (function)
+            Function to compute the top-n_dim PCs of a dataset
+    Returns:
+        ai (float)
+            Cross-validated alignment index between A and B
+    """
+
+    idxA = np.random.permutation(A.shape[0])
+    idxB = np.random.permutation(B.shape[0])
+    hA, hB = A.shape[0] // 2, B.shape[0] // 2
+
+    # 4 PCA fits and 4 scatter matrices in total
+    A1 = _Half(A[idxA[:hA]], n_dim, pca)
+    A2 = _Half(A[idxA[hA:]], n_dim, pca)
+    B1 = _Half(B[idxB[:hB]], n_dim, pca)
+    B2 = _Half(B[idxB[hB:]], n_dim, pca)
+
+    a = (_ai_pair(A1, B1) + _ai_pair(A2, B2)
+         + _ai_pair(A1, B2) + _ai_pair(A2, B1)) \
+        / (4 * (_ai_pair(A1, A2) + _ai_pair(A2, A1)))
+
+    b = (_ai_pair(B1, A1) + _ai_pair(B2, A2)
+         + _ai_pair(B1, A2) + _ai_pair(B2, A1)) \
+        / (4 * (_ai_pair(B1, B2) + _ai_pair(B2, B1)))
+
+    return a + b
