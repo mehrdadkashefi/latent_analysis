@@ -342,10 +342,11 @@ def get_dissimilarity_cond_avr(X, X_conds, Y, Y_conds, n_folds = 2, n_times = 1,
     return df_score, df 
 
 
-# Alignment index
-# helpers functions
 def _flat(X):
     """(trials, time, units) -> (trials*time, units).
+
+    Identical to X.transpose(2, 0, 1).reshape(X.shape[-1], -1).T but a
+    zero-copy view when X is C-contiguous instead of two full copies.
     """
     return X.reshape(-1, X.shape[-1])
 
@@ -354,7 +355,9 @@ def top_pcs(X, k):
     """Orthonormal basis (n_units, k) for the top-k PC subspace of X.
 
     X is (n_samples, n_units) and is mean-centred internally, exactly like
-    sklearn's PCA.
+    sklearn's PCA. Only the *subspace* matters downstream (trace(U' C U) is
+    invariant to rotations/sign flips within it), so we can use whichever
+    decomposition is cheapest.
     """
     X0 = X - X.mean(axis=0)
     n, u = X0.shape
@@ -373,23 +376,7 @@ def top_pcs(X, k):
 # single alignment index
 # ----------------------------------------------------------------------
 def alignment_index(A, B, n_dim=10, pca=top_pcs):
-    """
-    Variance of A captured by B's top-n_dim PCs, relative to A's own.
-
-    Args:
-        A (np.array)
-            First dataset (n_trials, n_time, n_chan)
-        B (np.array)    
-        Second dataset (n_trials, n_time, n_chan)
-        n_dim (int)
-            Number of principal components to use
-        pca (function)
-            Function to compute the top-n_dim PCs of a dataset
-    Returns:
-        ai (float)
-            Alignment index between A and B
-    
-    """
+    """Variance of A captured by B's top-n_dim PCs, relative to A's own."""
     Amat, Bmat = _flat(A), _flat(B)
     nA, nB = Amat.shape[0], Bmat.shape[0]
 
@@ -399,8 +386,8 @@ def alignment_index(A, B, n_dim=10, pca=top_pcs):
     UA = pca(Amat, n_dim)
     UB = pca(Bmat, n_dim)
 
-    Ac = Amat - mu
-    PA = Ac @ UA                         
+    Ac = Amat - mu                       # one centred copy, not two
+    PA = Ac @ UA                         # (n, k) - never form the (u, u) cov
     PB = Ac @ UB
     # trace(U' C_A U) == ||Ac @ U||_F^2 / (nA - 1); the 1/(nA-1) cancels
     return float((PB.ravel() @ PB.ravel()) / (PA.ravel() @ PA.ravel()))
@@ -419,8 +406,8 @@ class _Half:
         self.n = M.shape[0]
         self.mean = M.mean(axis=0)
         X0 = M - self.mean
-        self.S = X0.T @ X0
-        self.U = pca(M, n_dim)
+        self.S = X0.T @ X0               # scatter about its *own* mean, (u, u)
+        self.U = pca(M, n_dim)           # (u, k)
 
 
 def _quad(h, d, U):
@@ -438,33 +425,34 @@ def _ai_pair(X, Y):
     return _quad(X, d, Y.U) / _quad(X, d, X.U)
 
 
-def alignment_index_crossval(A, B, n_dim=10, pca=top_pcs):
-    """
-    Cross-validated alignment index, splitting trials in half.
-    
-    Args:
-        A (np.array)
-            First dataset (n_trials, n_time, n_chan)
-        B (np.array)
-            Second dataset (n_trials, n_time, n_chan)
-        n_dim (int)
-            Number of principal components to use
-        pca (function)
-            Function to compute the top-n_dim PCs of a dataset
-    Returns:
-        ai (float)
-            Cross-validated alignment index between A and B
-    """
+def _split(X, parts):
+    idx = np.random.permutation(X.shape[0])
+    k = X.shape[0] // parts
+    return [X[idx[i * k:(i + 1) * k]] for i in range(parts)]
 
-    idxA = np.random.permutation(A.shape[0])
-    idxB = np.random.permutation(B.shape[0])
-    hA, hB = A.shape[0] // 2, B.shape[0] // 2
 
-    # 4 PCA fits and 4 scatter matrices in total
-    A1 = _Half(A[idxA[:hA]], n_dim, pca)
-    A2 = _Half(A[idxA[hA:]], n_dim, pca)
-    B1 = _Half(B[idxB[:hB]], n_dim, pca)
-    B2 = _Half(B[idxB[hB:]], n_dim, pca)
+def alignment_index_crossval(A, B, n_dim=10, pca=top_pcs, same=None,
+                             match_diag=False):
+    """
+    same : bool or None
+        True if A and B are the same condition (diagonal of the matrix).
+        None -> inferred as `A is B`.
+    match_diag : bool
+        If True, off-diagonal halves are also subsampled to quarter size,
+        so diagonal and off-diagonal entries use the same number of trials.
+    """
+    if same:
+        # four disjoint quarters: A-halves and B-halves never share trials
+        a1, a2, b1, b2 = _split(A, 4)
+    elif match_diag:
+        a1, a2 = _split(A, 4)[:2]
+        b1, b2 = _split(B, 4)[:2]
+    else:
+        a1, a2 = _split(A, 2)
+        b1, b2 = _split(B, 2)
+
+    A1, A2 = _Half(a1, n_dim, pca), _Half(a2, n_dim, pca)
+    B1, B2 = _Half(b1, n_dim, pca), _Half(b2, n_dim, pca)
 
     a = (_ai_pair(A1, B1) + _ai_pair(A2, B2)
          + _ai_pair(A1, B2) + _ai_pair(A2, B1)) \
