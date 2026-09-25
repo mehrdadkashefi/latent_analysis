@@ -300,7 +300,13 @@ class Analysis_tools():
             return_padded (bool)
                 Whether to include padded data in return, default is False
             causal (bool)
-                Whether to use causal convolution, default is True
+                Whether to use causal convolution, default is True. Only used with kernel='gauss'.
+                Note: with the full Gaussian, causal=True delays the rate by 3 x gauss_width
+                (150 ms for 50 ms), since the kernel peaks at the middle of the window.
+            kernel (str)
+                'gauss' (half_gauss, default) or 'half_gauss' (right half of the Gaussian,
+                starting at the spike: always causal and peaks at lag 0, so onsets are not
+                delayed; mean lag is ~0.8 x gauss_width)
 
         Returns:
             FR (np.array)
@@ -312,6 +318,9 @@ class Analysis_tools():
         plot = kwargs.get('plot', False)   # Plot the single trial
         return_padded = kwargs.get('return_padded', False)   # Whether to returned  
         self.causal = kwargs.get('causal', True)   # Whether to use causal convolution
+        self.kernel = kwargs.get('kernel', 'half_gauss')   # Smoothing kernel: 'gauss' or 'half_gauss'
+        if self.kernel not in ('gauss', 'half_gauss'):
+            raise ValueError(f"kernel must be 'gauss' or 'half_gauss', got {self.kernel}")
         # Get the stem first
         stem = self.get_stem(units, which_unit, t, plot=False, dt=self.dt, t_pad=self.t_pad, return_padded=True)
         # Smooth the stem with Gaussian window
@@ -324,7 +333,13 @@ class Analysis_tools():
         # Create Gaussian kernel
         window = gaussian(win_len, gauss_bin_std, sym=True)
         window /=  np.sum(window)
-        if self.causal:
+        if self.kernel == 'half_gauss':
+            # Keep lags >= 0 only: the kernel starts at its peak, at the spike time
+            half_window = window[win_len // 2:]
+            half_window = half_window / np.sum(half_window)
+            FR = convolve(stem, half_window, 'full') / self.dt
+            FR = FR[:stem.shape[0]]
+        elif self.causal:
             FR = convolve(stem, window, 'full') / self.dt
             FR = FR[:stem.shape[0]]
         else:
@@ -400,7 +415,7 @@ class Analysis_tools():
         else:
             return np.vstack(data_aligned_trials), np.array(conds), np.hstack(aligned_trials_type).astype(int)
      
-    def align_fr(self, trial_info, units, condition_columns, align_column, unit, t_range, return_mean = True):
+    def align_fr(self, trial_info, units, condition_columns, align_column, unit, t_range, return_mean = True, **kwargs):
         """ Aligns units firing rate on a specific event 
 
         Args:
@@ -418,6 +433,8 @@ class Analysis_tools():
                 Time range to align the data
             return_mean (bool)
                 Whether to return the mean of trials of a condition, default is True
+            **kwargs
+                Passed to get_fr to set the smoothing (e.g. kernel='half_gauss', gauss_width=25)
 
         Returns: 
             data_aligned (np.array)
@@ -439,7 +456,7 @@ class Analysis_tools():
             for u_i, u in enumerate(unit):
                 # Loop over trials of the same conditioin
                 for i, tev in enumerate(event_times):
-                    data_temp[i, :, u_i] = self.get_fr(u, units, [tev + (t_range[0]/self.fs) , tev + (t_range[1]/self.fs)], plot=False)
+                    data_temp[i, :, u_i] = self.get_fr(u, units, [tev + (t_range[0]/self.fs) , tev + (t_range[1]/self.fs)], plot=False, **kwargs)
             if return_mean:
                 return np.expand_dims(np.mean(data_temp, axis=0), axis=0)
             else:
