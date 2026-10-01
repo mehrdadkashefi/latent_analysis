@@ -356,66 +356,87 @@ class Analysis_tools():
 
         return FR
     
-    def align_continuous(self, trial_info, D, condition_columns, align_column, channel_column, t_range, return_mean = True):
-        """ Aligns continuous data on a specific event 
-
-        Args:
-            trial_info (df)
-                Data frame of the trial information (Start time, end time, etc.)
-            D (df)
-                Data frame of the continuous data (Hand pos, Hand vel, etc.)
-            condition_columns (list)
-                Columns to group the data
-            align_column (str)
-                Column to align the data on
-            channel_column (str)
-                Which data column is selected
-            t_range (list)
-                Time range to align the data
-            return_mean (bool)
-                Whether to return the mean of trials of a condition, default is True
-
-        Returns:
-            data_aligned (np.array)
-                Aligned data (condition x time x channel)
-            conds (np.array)
-                Unique conditions
-            aligned_trials_type (np.array)
-                Type of the trials
-        """
-        conds = trial_info.set_index(condition_columns).index.unique().tolist()
-        data_aligned = np.zeros((len(conds),t_range[1] - t_range[0], len(D[channel_column].columns)))
-        data_aligned_trials = []
-        aligned_trials_type = []
-        for cond_i, cond in enumerate(conds):
-            # Make a mask to select desired trials
-            mask = np.all(trial_info[condition_columns] == cond, axis=1)
-            mask_idx = np.where(mask)[0]
-            # Get start time, end time and event time for each condition
-            # Start and end time in absolute time 
-            start_times = trial_info.iloc[mask_idx].start_time.to_numpy()
-            end_times = trial_info.iloc[mask_idx].stop_time.to_numpy()
-            # event code time reletive to trial start
-            event_times = trial_info.iloc[mask_idx][align_column].to_numpy() - start_times
-            # Allocate space for trials of the condition
-            data_temp = np.zeros((len(start_times) ,t_range[1] - t_range[0], len(D[channel_column].columns)))
-            # Loop over trials of the same conditioin
-            for i, (ts, tev, te) in enumerate(zip(start_times, event_times, end_times)):
-                temp = D[channel_column].iloc[int(ts*self.fs):int(te*self.fs), :].to_numpy()
-                t_event = int(tev*self.fs)
-                data_temp[i, :, :] = temp[t_event+t_range[0]:t_event+t_range[1], :]
-            # Get the mean over trials of condition
-            data_aligned[cond_i, :, :] = np.mean(data_temp, axis=0)
-            aligned_trials_type.append(cond_i * np.ones((len(mask_idx))))
-            if return_mean == False:
-                data_aligned_trials.append(data_temp)
-        # Return        
-        if return_mean == True:
-            return data_aligned, np.array(conds), np.hstack(aligned_trials_type).astype(int)
-        else:
-            return np.vstack(data_aligned_trials), np.array(conds), np.hstack(aligned_trials_type).astype(int)
+    def align_continuous(self, trial_info, D, condition_columns, align_column, channel_column, t_range, return_mean = True, return_resorted_trialInfo = False):
+            """ Aligns continuous data on a specific event 
+    
+            Args:
+                trial_info (df)
+                    Data frame of the trial information (Start time, end time, etc.)
+                D (df)
+                    Data frame of the continuous data (Hand pos, Hand vel, etc.)
+                condition_columns (list)
+                    Columns to group the data
+                align_column (str)
+                    Column to align the data on
+                channel_column (str)
+                    Which data column is selected
+                t_range (list)
+                    Time range to align the data
+                return_mean (bool)
+                    Whether to return the mean of trials of a condition, default is True
+                return_resorted_trialInfo (bool)
+                    Whether to return the trial information resorted based on the order of conditions, default is False
+    
+            Returns:
+                data_aligned (np.array)
+                    Aligned data (condition x time x channel)
+                conds (np.array)
+                    Unique conditions
+                aligned_trials_type (np.array)
+                    Type of the trials
+            """
+            conds = trial_info.set_index(condition_columns).index.unique().tolist()
+            data_aligned = np.zeros((len(conds),t_range[1] - t_range[0], len(D[channel_column].columns))) # for condition mean data reutrn
+            data_aligned_trials = [] # for single trial data return
+            trial_info_resorted = [] # trial_info resorted based on order of conditions
+            aligned_trials_type = []
+    
+    
+            def par_fuction_over_cond(args):
+                cond_i, cond = args 
+                # Make a mask to select desired trials
+                mask = np.all(trial_info[condition_columns] == cond, axis=1)
+                mask_idx = np.where(mask)[0]
+                # Get start time, end time and event time for each condition
+                # Start and end time in absolute time 
+                start_times = trial_info.iloc[mask_idx].start_time.to_numpy()
+                end_times = trial_info.iloc[mask_idx].stop_time.to_numpy()
+                # event code time reletive to trial start
+                event_times = trial_info.iloc[mask_idx][align_column].to_numpy() - start_times
+                # Allocate space for trials of the condition
+                data_temp = np.zeros((len(start_times) ,t_range[1] - t_range[0], len(D[channel_column].columns)))
+                # Loop over trials of the same conditioin
+                for i, (ts, tev, te) in enumerate(zip(start_times, event_times, end_times)):
+                    temp = D[channel_column].iloc[int(ts*self.fs):int(te*self.fs), :].to_numpy()
+                    t_event = int(tev*self.fs)
+                    data_temp[i, :, :] = temp[t_event+t_range[0]:t_event+t_range[1], :]
+                return data_temp, trial_info.iloc[mask_idx], cond_i
+    
+    
+            with multiprocess.Pool(processes=10) as pool:
+                all_data = pool.map(par_fuction_over_cond, list(enumerate(conds)))
+    
+            for data_i in all_data:
+                data, info, cond_i = data_i
+                if return_mean:
+                    data_aligned[cond_i, :, :] = np.expand_dims(np.mean(data, axis=0), axis=0)
+                else:
+                    data_aligned_trials.append(data) 
+                trial_info_resorted.append(info)
+                aligned_trials_type.append(cond_i * np.ones(len(info)))
+                    
+            if return_resorted_trialInfo:
+                if return_mean:
+                    return (data_aligned), np.array(conds), np.hstack(aligned_trials_type).astype(int), pd.concat(trial_info_resorted, axis=0, ignore_index=True)
+                else:
+                    return np.vstack(data_aligned_trials), np.array(conds), np.hstack(aligned_trials_type).astype(int), pd.concat(trial_info_resorted, axis=0, ignore_index=True)
+            else:
+                if return_mean == True:
+                    return (data_aligned), np.array(conds), np.hstack(aligned_trials_type).astype(int)
+                else:
+                    return np.vstack(data_aligned_trials), np.array(conds), np.hstack(aligned_trials_type).astype(int)
      
-    def align_fr(self, trial_info, units, condition_columns, align_column, unit, t_range, return_mean = True, **kwargs):
+    def align_fr(self, trial_info, units, condition_columns, align_column, unit, t_range, return_mean = True, return_trialInfo = False, **kwargs):
         """ Aligns units firing rate on a specific event 
 
         Args:
@@ -433,6 +454,8 @@ class Analysis_tools():
                 Time range to align the data
             return_mean (bool)
                 Whether to return the mean of trials of a condition, default is True
+            return_trialInfo (bool)
+                If return_trialInfo is True, trial information is returned similar to align_continuous, default is False
             **kwargs
                 Passed to get_fr to set the smoothing (e.g. kernel='half_gauss', gauss_width=25)
 
@@ -441,31 +464,50 @@ class Analysis_tools():
                 Aligned data (condition x time x unit)
         """
         conds = trial_info.set_index(condition_columns).index.unique().tolist()
-        data_aligned = np.zeros((len(conds),t_range[1] - t_range[0], len(unit)))
+        data_aligned = np.zeros((len(conds),t_range[1] - t_range[0], len(unit))) # for condition mean data reutrn
+        data_aligned_trials = [] # for single trial data return
+        trial_info_resorted = [] # trial_info resorted based on order of conditions
+        aligned_trials_type = []
+        
 
-        #for cond_i, cond in enumerate(conds):
-        def par_fuction_over_cond(cond):
+        def par_fuction_over_cond(args):
+            cond_i, cond = args  
             # Make a mask to select desired trials
             mask = np.all(trial_info[condition_columns] == cond, axis=1)
             mask_idx = np.where(mask)[0]
             # event code time reletive to trial start
             event_times = trial_info.iloc[mask_idx][align_column].to_numpy()
             # Allocate space for trials of the condition
-            data_temp = np.zeros((len(event_times) ,t_range[1] - t_range[0], len(unit)))
+            data_temp = np.zeros((len(event_times), t_range[1] - t_range[0], len(unit)))
             
             for u_i, u in enumerate(unit):
                 # Loop over trials of the same conditioin
                 for i, tev in enumerate(event_times):
                     data_temp[i, :, u_i] = self.get_fr(u, units, [tev + (t_range[0]/self.fs) , tev + (t_range[1]/self.fs)], plot=False, **kwargs)
-            if return_mean:
-                return np.expand_dims(np.mean(data_temp, axis=0), axis=0)
-            else:
-                return data_temp
+            return data_temp, trial_info.iloc[mask_idx], cond_i
         
         with multiprocess.Pool(processes=10) as pool:
-            data_aligned = pool.map(par_fuction_over_cond, conds)
-            
-        return np.vstack(data_aligned)
+            all_data = pool.map(par_fuction_over_cond, list(enumerate(conds)))
+
+        for data_i in all_data:
+            data, info, cond_i = data_i
+            if return_mean:
+                data_aligned[cond_i, :, :] = np.expand_dims(np.mean(data, axis=0), axis=0)
+            else:
+                data_aligned_trials.append(data)
+            trial_info_resorted.append(info)
+            aligned_trials_type.append(cond_i * np.ones(len(info)))
+
+        if return_trialInfo:
+            if return_mean:
+                return (data_aligned), np.array(conds), np.hstack(aligned_trials_type).astype(int), pd.concat(trial_info_resorted, axis=0, ignore_index=True)
+            else:
+                return np.vstack(data_aligned_trials), np.array(conds), np.hstack(aligned_trials_type).astype(int), pd.concat(trial_info_resorted, axis=0, ignore_index=True)
+        else: # do not return trial info
+            if return_mean:
+                return data_aligned
+            else:
+                return np.vstack(data_aligned_trials)
     
     def align_stem(self, trial_info, units, condition_columns, align_column, unit, t_range):
         """ Aligns units firing rate on a specific event 
