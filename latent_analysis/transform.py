@@ -344,6 +344,15 @@ class dPCA():
             
 
         return Z
+        
+    def return_explained_variance(self):
+        """ Return the explained variance of the dPCA model
+
+        Returns:
+            var_explained (np.array)
+                explained variance for each factor and component
+        """
+        return self.var_explained_df
 
 class CVdPCA():
     """ Class for fitting and transforming data with dPCA, using dPCA toolbox (individual trials are needed for crossvalidated estimation of covariance)
