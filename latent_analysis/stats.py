@@ -153,8 +153,10 @@ class VarDecompose():
             If True, the interaction terms will be orthogonalized
         verbose (bool)
             If True, the covariance matrices will be plotted
+        ortho_indicators (bool)
+            If True, the main rdms will be orthogonalized
     """
-    def __init__(self, Indicators, ortho_ineraction = 1,  verbose=1):
+    def __init__(self, Indicators, ortho_ineraction=1,  verbose=1, ortho_indicators=False):
         # Define model covariance G_m
         self.G_m = self.G_maker()
         for key in Indicators.keys():
@@ -168,29 +170,40 @@ class VarDecompose():
             K = Indicators[key].shape[0]
             H = np.eye(K) - np.ones((K, K)) / K
             g = H@D@D.T@H.T
-            self.G_m.add(g/np.trace(g), key)
+            g /= np.trace(g)
+
+            if ortho_indicators: # Making Gs orthogonal - default is False
+                for i, g_made in enumerate(self.G_m.G):
+                    g = g - g_made @ np.linalg.pinv(g_made) @ g
+
+            self.G_m.add(g, key)
 
         if verbose:
             self.G_m.plot()
 
-    def fit(self, Y):
+    def fit(self, Y, return_Gemp=False):
         """ Fit the model to the data
 
         Args:
             Y (np.array)
                 The hidden data (num_conditions, num_timepoints, num_hidden_variables)
+            return_Gemp (bool)
+                If True, the empirical G matrices will be returned, default is False
                 
         Returns:
             tss (np.array)
                 Total variance of hidden variables
             fss (np.array)
                 Explained variance by each model
+            all_emp_G (list)
+                List of empirical G matrices for each timepoint
         """
         self.num_cond = Y.shape[0]
         X = np.zeros((self.num_cond**2, self.G_m.num_models))
         for i, g in enumerate(self.G_m.G):
             X[:, i] = g.flatten()
 
+        self.all_emp_G = []
         self.beta = np.zeros((self.G_m.num_models, Y.shape[1])) 
         self.tss = np.zeros((Y.shape[1], 1))
         self.fss = np.zeros((self.G_m.num_models, Y.shape[1]))
@@ -201,12 +214,74 @@ class VarDecompose():
             K = y.shape[0]
             H = np.eye(K) - np.ones((K, K)) / K
             G_emp = H@y@y.T@H.T
+            self.all_emp_G.append(G_emp)
             # Do regression
             self.beta[:, t] = nnls(X, G_emp.reshape(-1,))[0]
             self.tss[t] = np.trace(G_emp)  # Total variance of Hiddens
             for f, gm in enumerate(self.G_m.G):
                 self.fss[f, t] = np.trace(gm)*self.beta[f, t]
-        return self.tss, self.fss
+        if return_Gemp:
+            return self.tss, self.fss, self.all_emp_G
+        else:
+            return self.tss, self.fss
+
+    def fit_cross_val(self, Y, return_Gemp=False):
+        """ Fit the model to the data for k_folded data with cross validating the Gemp
+
+        Args:
+            Y (np.array)
+                The hidden data (k_folds, num_conditions, num_timepoints, num_hidden_variables)
+            return_Gemp (bool)
+                If True, the empirical G matrices will be returned, default is False
+
+        Returns:
+            tss (np.array)
+                Total variance of hidden variables
+            fss (np.array)
+                Explained variance by each model
+            all_emp_G (list)
+                List of empirical G matrices for each timepoint
+        """
+
+        self.k_fold = Y.shape[0]
+        self.num_cond = Y.shape[1]
+        X = np.zeros((self.num_cond**2, self.G_m.num_models))
+        for i, g in enumerate(self.G_m.G):
+            X[:, i] = g.flatten()
+
+        self.all_emp_G = np.zeros((self.k_fold, Y.shape[2], self.num_cond, self.num_cond)) 
+        self.beta = np.zeros((self.k_fold, self.G_m.num_models, Y.shape[2])) 
+        self.tss = np.zeros((self.k_fold, Y.shape[2], 1))
+        self.fss = np.zeros((self.k_fold, self.G_m.num_models, Y.shape[2]))
+
+        for k in range(self.k_fold):
+            for t in range(Y.shape[2]):
+                y1 = np.squeeze(Y[k, :, t, :]) # one split of data
+                
+                if (self.k_fold > 1):
+                    y2 = np.squeeze(np.mean(Y[np.arange(self.k_fold) != k, :, t, :], axis=0)) # average of other splits
+                elif(self.k_fold == 1):
+                    y2 = np.copy(y1) # if only one fold, use the same data for both y1 and y2 (no cross-validation)
+
+                # Get empirical G
+                K = np.copy(self.num_cond)
+                H = np.eye(K) - np.ones((K, K)) / K
+                G_emp = H@y1@y2.T@H.T
+                self.all_emp_G[k, t, :, :] = G_emp
+                # Do regression
+                self.beta[k, :, t] = nnls(X, G_emp.reshape(-1,))[0]
+                self.tss[k, t] = np.trace(G_emp)  # Total variance of Hiddens
+                for f, gm in enumerate(self.G_m.G):
+                    self.fss[k, f, t] = np.trace(gm)*self.beta[k, f, t]
+
+        if return_Gemp:
+            return self.tss, self.fss, self.all_emp_G
+        else:
+            return self.tss, self.fss
+
+    def return_rdms(self):
+        """ Returns the model Gs"""
+        return self.G_m
     
     def plot(self, **kwargs):
         """ Plot the results
@@ -311,7 +386,7 @@ class TimePointClassifier():
         self.num_sampling_rep = num_sampling_rep
         self.num_core = num_core
   
-    def fit(self, X, y):
+    def fit(self, X, y, return_std=False):
         """ Run the classification models on every timepoint
 
         Args:
@@ -319,17 +394,23 @@ class TimePointClassifier():
                 The continuous data (num_conditions, num_timepoints, num_variables)
             y (np.array)
                 The associated class value (num_conditions, )
+            return_std (bool)
+                If True, the std of accuracy will be returned, default is False
         Returns:
             acc (np.array)
                 Accuracy of the model
             acc_chance (np.array)
                 Chance level accuracy
+            acc_std (np.array)
+                Std of accuracy of the model over k fold
+            acc_chance_std (np.array)
+                Std of chance level accuracy of the model over k fold
         """
         self.X = X
         self.y = y
         
         if self.num_core ==1:
-            acc = np.zeros((X.shape[1],2))
+            acc = np.zeros((X.shape[1],4)) # avg, chance, std, chance_std
             for t in tqdm(range(X.shape[1])):
                 acc[t, :] = self.par_function_classification(t)
         else:
@@ -337,10 +418,16 @@ class TimePointClassifier():
             with multiprocess.Pool(processes=self.num_core) as pool:
                 acc  = pool.map(self.par_function_classification, range(X.shape[1]))
             acc = np.array(acc) 
-            
+
+        self.acc_chance_std = acc[:, 3]
+        self.acc_std = acc[:, 2]    
         self.acc_chance = acc[:, 1]
         self.acc = acc[:, 0]
-        return self.acc, self.acc_chance
+
+        if return_std:
+            return self.acc, self.acc_chance, self.acc_std, self.acc_chance_std
+        else:
+            return self.acc, self.acc_chance
     
     def plot(self, winseize = 40):
         plt.plot(savgol_filter(self.acc, window_length=winseize, polyorder=3), color='k')
@@ -357,9 +444,13 @@ class TimePointClassifier():
         acc_temp = []
         acc_rand_temp = []
         for _ in range(self.num_sampling_rep):
-            acc_temp.append(self.classifier(X,y, randomize_y = False))
+            acc_temp.append(self.classifier(X,y, randomize_y = False)) # pairs of maen and std of the accuracy over k fold
             acc_rand_temp.append(self.classifier(X,y, randomize_y = True))
-        return np.mean(acc_temp), np.mean(acc_rand_temp)
+
+        acc_temp = np.array(acc_temp)
+        acc_rand_temp = np.array(acc_rand_temp)
+
+        return np.mean(acc_temp[:, 0]), np.mean(acc_rand_temp[:, 0]), np.mean(acc_temp[:, 1]), np.mean(acc_rand_temp[:, 1])
     
     def classifier(self, X,y, randomize_y = False):
         if randomize_y:
@@ -372,8 +463,10 @@ class TimePointClassifier():
             y_train, y_test = y[train_index], y[test_index]
             clf = RidgeClassifierCV(alphas=(0.1, 10.0, 100.0,1000.0)).fit(X_train, y_train)
             score.append(clf.score(X_test, y_test))
-        score = np.mean(score)
-        return score
+            
+        avg_score = np.mean(score)
+        std_score = np.std(score)
+        return np.array([avg_score, std_score])
     
 # Runs a family of models on every timepoint
 class Model():
